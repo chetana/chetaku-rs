@@ -14,7 +14,7 @@ tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "chrono", "macros"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-native-tls", "postgres", "chrono", "macros"] }
 
 # HTTP client (Jikan + RAWG)
 reqwest = { version = "0.12", features = ["json"] }
