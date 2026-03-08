@@ -49,6 +49,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/strava/activities",         get(routes::cycling::list))
         .route("/strava/stats",              get(routes::cycling::stats))
         .route("/strava/sync",               post(routes::cycling::sync))
+        .route("/voyage",                    get(routes::voyage::list).post(routes::voyage::create))
+        .route("/voyage/stats",              get(routes::voyage::stats))
+        .route("/voyage/{id}",               patch(routes::voyage::update).delete(routes::voyage::delete_voyage))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(pool);

@@ -1,8 +1,11 @@
 use axum::{extract::State, Json};
 use serde::Serialize;
+use serde_json::Value;
 use sqlx::{PgPool, Row};
 
 use crate::error::AppError;
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
 pub struct GenreCount {
@@ -74,285 +77,145 @@ pub struct Stats {
     pub top_series_creators: Vec<CreatorStat>,
 }
 
+// ── Helpers SQL ────────────────────────────────────────────────────────────────
+
 async fn count(pool: &PgPool, sql: &str) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar::<_, i64>(sql).fetch_one(pool).await
 }
 
-pub async fn handler(State(pool): State<PgPool>) -> Result<Json<Stats>, AppError> {
-    // ── Counts de base ────────────────────────────────────────────────────────
-    let total_anime     = count(&pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'anime'").await?;
-    let total_games     = count(&pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'game'").await?;
-    let anime_completed = count(&pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'anime' AND status = 'completed'").await?;
-    let games_completed = count(&pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'game' AND status = 'completed'").await?;
-    let anime_watching  = count(&pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'anime' AND status = 'watching'").await?;
-    let games_playing   = count(&pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'game' AND status = 'playing'").await?;
-
-    let average_anime_score: Option<f64> = sqlx::query_scalar(
-        "SELECT AVG(score::float) FROM media_entries WHERE media_type = 'anime' AND score IS NOT NULL"
-    ).fetch_one(&pool).await?;
-
-    let average_game_score: Option<f64> = sqlx::query_scalar(
-        "SELECT AVG(score::float) FROM media_entries WHERE media_type = 'game' AND score IS NOT NULL"
-    ).fetch_one(&pool).await?;
-
-    // ── Totaux épisodes / playtime ────────────────────────────────────────────
-    let total_episodes_watched: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(episodes_watched), 0) FROM media_entries WHERE media_type IN ('anime', 'series')"
-    ).fetch_one(&pool).await?;
-
-    let total_playtime_hours: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(playtime_hours), 0) FROM media_entries WHERE media_type = 'game'"
-    ).fetch_one(&pool).await?;
-
-    // ── Top genres (compat existant — count only) ────────────────────────────
-    let top_genres_rows = sqlx::query(
-        "SELECT genre, COUNT(*) as count
-         FROM media_entries, UNNEST(genres) AS genre
-         GROUP BY genre ORDER BY count DESC LIMIT 10"
-    ).fetch_all(&pool).await?;
-
-    let top_genres = top_genres_rows.into_iter().map(|row| GenreCount {
-        genre: row.get("genre"),
-        count: row.get("count"),
-    }).collect();
-
-    // ── Genres pondérés par score (anime) ────────────────────────────────────
-    let anime_genre_rows = sqlx::query(
+async fn genre_stats(pool: &PgPool, media_type: &str) -> Result<Vec<GenreStat>, sqlx::Error> {
+    let rows = sqlx::query(&format!(
         "SELECT genre,
                 COUNT(*) as count,
                 ROUND(AVG(score::float)::numeric, 2)::float8 as avg_score,
                 ROUND((COUNT(*) * AVG(score::float))::numeric, 2)::float8 as love_score
          FROM media_entries, UNNEST(genres) AS genre
-         WHERE media_type = 'anime' AND score IS NOT NULL
+         WHERE media_type = '{media_type}' AND score IS NOT NULL
          GROUP BY genre ORDER BY love_score DESC LIMIT 10"
-    ).fetch_all(&pool).await?;
+    ))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| GenreStat {
+        genre: r.get("genre"),
+        count: r.get("count"),
+        avg_score: r.get("avg_score"),
+        love_score: r.get("love_score"),
+    }).collect())
+}
 
-    let top_anime_genres = anime_genre_rows.into_iter().map(|row| GenreStat {
-        genre: row.get("genre"),
-        count: row.get("count"),
-        avg_score: row.get::<f64, _>("avg_score"),
-        love_score: row.get::<f64, _>("love_score"),
-    }).collect();
-
-    // ── Genres pondérés par score (jeux) ─────────────────────────────────────
-    let game_genre_rows = sqlx::query(
-        "SELECT genre,
-                COUNT(*) as count,
-                ROUND(AVG(score::float)::numeric, 2)::float8 as avg_score,
-                ROUND((COUNT(*) * AVG(score::float))::numeric, 2)::float8 as love_score
-         FROM media_entries, UNNEST(genres) AS genre
-         WHERE media_type = 'game' AND score IS NOT NULL
-         GROUP BY genre ORDER BY love_score DESC LIMIT 10"
-    ).fetch_all(&pool).await?;
-
-    let top_game_genres = game_genre_rows.into_iter().map(|row| GenreStat {
-        genre: row.get("genre"),
-        count: row.get("count"),
-        avg_score: row.get::<f64, _>("avg_score"),
-        love_score: row.get::<f64, _>("love_score"),
-    }).collect();
-
-    // ── Distribution des scores (anime) ──────────────────────────────────────
-    let anime_score_rows = sqlx::query(
+async fn score_dist(pool: &PgPool, media_type: &str) -> Result<Vec<ScoreCount>, sqlx::Error> {
+    let rows = sqlx::query(&format!(
         "SELECT score, COUNT(*) as count
-         FROM media_entries WHERE media_type = 'anime' AND score IS NOT NULL
+         FROM media_entries WHERE media_type = '{media_type}' AND score IS NOT NULL
          GROUP BY score ORDER BY score"
-    ).fetch_all(&pool).await?;
+    ))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| ScoreCount {
+        score: r.get("score"),
+        count: r.get("count"),
+    }).collect())
+}
 
-    let anime_score_distribution = anime_score_rows.into_iter().map(|row| ScoreCount {
-        score: row.get("score"),
-        count: row.get("count"),
-    }).collect();
-
-    // ── Distribution des scores (jeux) ───────────────────────────────────────
-    let game_score_rows = sqlx::query(
-        "SELECT score, COUNT(*) as count
-         FROM media_entries WHERE media_type = 'game' AND score IS NOT NULL
-         GROUP BY score ORDER BY score"
-    ).fetch_all(&pool).await?;
-
-    let game_score_distribution = game_score_rows.into_iter().map(|row| ScoreCount {
-        score: row.get("score"),
-        count: row.get("count"),
-    }).collect();
-
-    // ── Statuts anime ─────────────────────────────────────────────────────────
-    let anime_status_rows = sqlx::query(
+async fn status_counts(pool: &PgPool, media_type: &str) -> Result<Vec<StatusCount>, sqlx::Error> {
+    let rows = sqlx::query(&format!(
         "SELECT status, COUNT(*) as count
-         FROM media_entries WHERE media_type = 'anime'
+         FROM media_entries WHERE media_type = '{media_type}'
          GROUP BY status ORDER BY count DESC"
-    ).fetch_all(&pool).await?;
+    ))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| StatusCount {
+        status: r.get("status"),
+        count: r.get("count"),
+    }).collect())
+}
 
-    let anime_status = anime_status_rows.into_iter().map(|row| StatusCount {
-        status: row.get("status"),
-        count: row.get("count"),
-    }).collect();
-
-    // ── Statuts jeux ─────────────────────────────────────────────────────────
-    let game_status_rows = sqlx::query(
-        "SELECT status, COUNT(*) as count
-         FROM media_entries WHERE media_type = 'game'
-         GROUP BY status ORDER BY count DESC"
-    ).fetch_all(&pool).await?;
-
-    let game_status = game_status_rows.into_iter().map(|row| StatusCount {
-        status: row.get("status"),
-        count: row.get("count"),
-    }).collect();
-
-    // ── Studios anime (top 6) ─────────────────────────────────────────────────
-    let anime_studio_rows = sqlx::query(
+async fn top_creators(pool: &PgPool, media_type: &str) -> Result<Vec<CreatorStat>, sqlx::Error> {
+    let rows = sqlx::query(&format!(
         "SELECT creator, COUNT(*) as count,
                 ROUND(AVG(score::float)::numeric, 1)::float8 as avg_score
          FROM media_entries
-         WHERE media_type = 'anime' AND creator IS NOT NULL
+         WHERE media_type = '{media_type}' AND creator IS NOT NULL
          GROUP BY creator ORDER BY count DESC, avg_score DESC NULLS LAST LIMIT 6"
-    ).fetch_all(&pool).await?;
+    ))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| CreatorStat {
+        creator: r.get("creator"),
+        count: r.get("count"),
+        avg_score: r.get("avg_score"),
+    }).collect())
+}
 
-    let top_anime_studios = anime_studio_rows.into_iter().map(|row| CreatorStat {
-        creator: row.get("creator"),
-        count: row.get("count"),
-        avg_score: row.get::<Option<f64>, _>("avg_score"),
+// ── Calcul + stockage en DB ───────────────────────────────────────────────────
+
+pub async fn compute_and_store(pool: &PgPool) -> Result<Value, AppError> {
+    let (
+        (total_anime, total_games, total_movies, total_series),
+        (anime_completed, games_completed, movies_completed, series_completed),
+        (anime_watching, games_playing),
+        (average_anime_score, average_game_score, average_movie_score, average_series_score),
+        (total_episodes_watched, total_playtime_hours),
+        top_genres_rows,
+        (top_anime_genres, top_game_genres, top_movie_genres, top_series_genres),
+        (anime_score_distribution, game_score_distribution, movie_score_distribution, series_score_distribution),
+        (anime_status, game_status, movie_status, series_status),
+        (top_anime_studios, top_game_developers, top_movie_directors, top_series_creators),
+    ) = tokio::try_join!(
+        async { tokio::try_join!(
+            count(pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'anime'"),
+            count(pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'game'"),
+            count(pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'movie'"),
+            count(pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'series'"),
+        ).map_err(AppError::Db) },
+        async { tokio::try_join!(
+            count(pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'anime' AND status = 'completed'"),
+            count(pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'game' AND status = 'completed'"),
+            count(pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'movie' AND status = 'completed'"),
+            count(pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'series' AND status = 'completed'"),
+        ).map_err(AppError::Db) },
+        async { tokio::try_join!(
+            count(pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'anime' AND status = 'watching'"),
+            count(pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'game' AND status = 'playing'"),
+        ).map_err(AppError::Db) },
+        async { tokio::try_join!(
+            sqlx::query_scalar::<_, Option<f64>>("SELECT AVG(score::float) FROM media_entries WHERE media_type = 'anime' AND score IS NOT NULL").fetch_one(pool),
+            sqlx::query_scalar::<_, Option<f64>>("SELECT AVG(score::float) FROM media_entries WHERE media_type = 'game' AND score IS NOT NULL").fetch_one(pool),
+            sqlx::query_scalar::<_, Option<f64>>("SELECT AVG(score::float) FROM media_entries WHERE media_type = 'movie' AND score IS NOT NULL").fetch_one(pool),
+            sqlx::query_scalar::<_, Option<f64>>("SELECT AVG(score::float) FROM media_entries WHERE media_type = 'series' AND score IS NOT NULL").fetch_one(pool),
+        ).map_err(AppError::Db) },
+        async { tokio::try_join!(
+            sqlx::query_scalar::<_, i64>("SELECT COALESCE(SUM(episodes_watched), 0) FROM media_entries WHERE media_type IN ('anime', 'series')").fetch_one(pool),
+            sqlx::query_scalar::<_, i64>("SELECT COALESCE(SUM(playtime_hours), 0) FROM media_entries WHERE media_type = 'game'").fetch_one(pool),
+        ).map_err(AppError::Db) },
+        async { sqlx::query(
+            "SELECT genre, COUNT(*) as count FROM media_entries, UNNEST(genres) AS genre GROUP BY genre ORDER BY count DESC LIMIT 10"
+        ).fetch_all(pool).await.map_err(AppError::Db) },
+        async { tokio::try_join!(
+            genre_stats(pool, "anime"), genre_stats(pool, "game"),
+            genre_stats(pool, "movie"), genre_stats(pool, "series"),
+        ).map_err(AppError::Db) },
+        async { tokio::try_join!(
+            score_dist(pool, "anime"), score_dist(pool, "game"),
+            score_dist(pool, "movie"), score_dist(pool, "series"),
+        ).map_err(AppError::Db) },
+        async { tokio::try_join!(
+            status_counts(pool, "anime"), status_counts(pool, "game"),
+            status_counts(pool, "movie"), status_counts(pool, "series"),
+        ).map_err(AppError::Db) },
+        async { tokio::try_join!(
+            top_creators(pool, "anime"), top_creators(pool, "game"),
+            top_creators(pool, "movie"), top_creators(pool, "series"),
+        ).map_err(AppError::Db) },
+    )?;
+
+    let top_genres = top_genres_rows.into_iter().map(|r: sqlx::postgres::PgRow| GenreCount {
+        genre: r.get("genre"),
+        count: r.get("count"),
     }).collect();
 
-    // ── Développeurs jeux (top 6) ─────────────────────────────────────────────
-    let game_dev_rows = sqlx::query(
-        "SELECT creator, COUNT(*) as count,
-                ROUND(AVG(score::float)::numeric, 1)::float8 as avg_score
-         FROM media_entries
-         WHERE media_type = 'game' AND creator IS NOT NULL
-         GROUP BY creator ORDER BY count DESC, avg_score DESC NULLS LAST LIMIT 6"
-    ).fetch_all(&pool).await?;
-
-    let top_game_developers = game_dev_rows.into_iter().map(|row| CreatorStat {
-        creator: row.get("creator"),
-        count: row.get("count"),
-        avg_score: row.get::<Option<f64>, _>("avg_score"),
-    }).collect();
-
-    // ── Films ─────────────────────────────────────────────────────────────────
-    let total_movies   = count(&pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'movie'").await?;
-    let movies_completed = count(&pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'movie' AND status = 'completed'").await?;
-
-    let average_movie_score: Option<f64> = sqlx::query_scalar(
-        "SELECT AVG(score::float) FROM media_entries WHERE media_type = 'movie' AND score IS NOT NULL"
-    ).fetch_one(&pool).await?;
-
-    let movie_genre_rows = sqlx::query(
-        "SELECT genre,
-                COUNT(*) as count,
-                ROUND(AVG(score::float)::numeric, 2)::float8 as avg_score,
-                ROUND((COUNT(*) * AVG(score::float))::numeric, 2)::float8 as love_score
-         FROM media_entries, UNNEST(genres) AS genre
-         WHERE media_type = 'movie' AND score IS NOT NULL
-         GROUP BY genre ORDER BY love_score DESC LIMIT 10"
-    ).fetch_all(&pool).await?;
-
-    let top_movie_genres = movie_genre_rows.into_iter().map(|row| GenreStat {
-        genre: row.get("genre"),
-        count: row.get("count"),
-        avg_score: row.get::<f64, _>("avg_score"),
-        love_score: row.get::<f64, _>("love_score"),
-    }).collect();
-
-    let movie_score_rows = sqlx::query(
-        "SELECT score, COUNT(*) as count
-         FROM media_entries WHERE media_type = 'movie' AND score IS NOT NULL
-         GROUP BY score ORDER BY score"
-    ).fetch_all(&pool).await?;
-
-    let movie_score_distribution = movie_score_rows.into_iter().map(|row| ScoreCount {
-        score: row.get("score"),
-        count: row.get("count"),
-    }).collect();
-
-    let movie_status_rows = sqlx::query(
-        "SELECT status, COUNT(*) as count
-         FROM media_entries WHERE media_type = 'movie'
-         GROUP BY status ORDER BY count DESC"
-    ).fetch_all(&pool).await?;
-
-    let movie_status = movie_status_rows.into_iter().map(|row| StatusCount {
-        status: row.get("status"),
-        count: row.get("count"),
-    }).collect();
-
-    let movie_director_rows = sqlx::query(
-        "SELECT creator, COUNT(*) as count,
-                ROUND(AVG(score::float)::numeric, 1)::float8 as avg_score
-         FROM media_entries
-         WHERE media_type = 'movie' AND creator IS NOT NULL
-         GROUP BY creator ORDER BY count DESC, avg_score DESC NULLS LAST LIMIT 6"
-    ).fetch_all(&pool).await?;
-
-    let top_movie_directors = movie_director_rows.into_iter().map(|row| CreatorStat {
-        creator: row.get("creator"),
-        count: row.get("count"),
-        avg_score: row.get::<Option<f64>, _>("avg_score"),
-    }).collect();
-
-    // ── Séries ────────────────────────────────────────────────────────────────
-    let total_series   = count(&pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'series'").await?;
-    let series_completed = count(&pool, "SELECT COUNT(*) FROM media_entries WHERE media_type = 'series' AND status = 'completed'").await?;
-
-    let average_series_score: Option<f64> = sqlx::query_scalar(
-        "SELECT AVG(score::float) FROM media_entries WHERE media_type = 'series' AND score IS NOT NULL"
-    ).fetch_one(&pool).await?;
-
-    let series_genre_rows = sqlx::query(
-        "SELECT genre,
-                COUNT(*) as count,
-                ROUND(AVG(score::float)::numeric, 2)::float8 as avg_score,
-                ROUND((COUNT(*) * AVG(score::float))::numeric, 2)::float8 as love_score
-         FROM media_entries, UNNEST(genres) AS genre
-         WHERE media_type = 'series' AND score IS NOT NULL
-         GROUP BY genre ORDER BY love_score DESC LIMIT 10"
-    ).fetch_all(&pool).await?;
-
-    let top_series_genres = series_genre_rows.into_iter().map(|row| GenreStat {
-        genre: row.get("genre"),
-        count: row.get("count"),
-        avg_score: row.get::<f64, _>("avg_score"),
-        love_score: row.get::<f64, _>("love_score"),
-    }).collect();
-
-    let series_score_rows = sqlx::query(
-        "SELECT score, COUNT(*) as count
-         FROM media_entries WHERE media_type = 'series' AND score IS NOT NULL
-         GROUP BY score ORDER BY score"
-    ).fetch_all(&pool).await?;
-
-    let series_score_distribution = series_score_rows.into_iter().map(|row| ScoreCount {
-        score: row.get("score"),
-        count: row.get("count"),
-    }).collect();
-
-    let series_status_rows = sqlx::query(
-        "SELECT status, COUNT(*) as count
-         FROM media_entries WHERE media_type = 'series'
-         GROUP BY status ORDER BY count DESC"
-    ).fetch_all(&pool).await?;
-
-    let series_status = series_status_rows.into_iter().map(|row| StatusCount {
-        status: row.get("status"),
-        count: row.get("count"),
-    }).collect();
-
-    let series_creator_rows = sqlx::query(
-        "SELECT creator, COUNT(*) as count,
-                ROUND(AVG(score::float)::numeric, 1)::float8 as avg_score
-         FROM media_entries
-         WHERE media_type = 'series' AND creator IS NOT NULL
-         GROUP BY creator ORDER BY count DESC, avg_score DESC NULLS LAST LIMIT 6"
-    ).fetch_all(&pool).await?;
-
-    let top_series_creators = series_creator_rows.into_iter().map(|row| CreatorStat {
-        creator: row.get("creator"),
-        count: row.get("count"),
-        avg_score: row.get::<Option<f64>, _>("avg_score"),
-    }).collect();
-
-    Ok(Json(Stats {
+    let stats = Stats {
         total_anime, total_games, total_movies, total_series,
         anime_completed, games_completed, movies_completed, series_completed,
         anime_watching, games_playing,
@@ -364,5 +227,50 @@ pub async fn handler(State(pool): State<PgPool>) -> Result<Json<Stats>, AppError
         movie_score_distribution, series_score_distribution,
         anime_status, game_status, movie_status, series_status,
         top_anime_studios, top_game_developers, top_movie_directors, top_series_creators,
-    }))
+    };
+
+    let value = serde_json::to_value(&stats)
+        .map_err(|e| AppError::ExternalApi(format!("stats serialize: {e}")))?;
+
+    sqlx::query(
+        "INSERT INTO stats_cache (key, value, computed_at)
+         VALUES ('media_stats', $1, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, computed_at = NOW()"
+    )
+    .bind(&value)
+    .execute(pool)
+    .await
+    .map_err(AppError::Db)?;
+
+    tracing::info!("Stats recomputed and cached in DB");
+    Ok(value)
+}
+
+/// À appeler après tout ajout / modification / suppression
+pub async fn invalidate(pool: &PgPool) {
+    if let Err(e) = sqlx::query("DELETE FROM stats_cache WHERE key = 'media_stats'")
+        .execute(pool)
+        .await
+    {
+        tracing::warn!("Failed to invalidate stats cache: {e}");
+    }
+}
+
+// ── Handler ────────────────────────────────────────────────────────────────────
+
+pub async fn handler(State(pool): State<PgPool>) -> Result<Json<Value>, AppError> {
+    // 1 seule requête rapide — lit le JSONB stocké
+    let cached: Option<Value> = sqlx::query_scalar(
+        "SELECT value FROM stats_cache WHERE key = 'media_stats' AND computed_at > NOW() - interval '30 seconds'"
+    )
+    .fetch_optional(&pool)
+    .await
+    .map_err(AppError::Db)?;
+
+    if let Some(value) = cached {
+        return Ok(Json(value));
+    }
+
+    // Cache absent → calculer maintenant (premier appel, ou après invalidation)
+    Ok(Json(compute_and_store(&pool).await?))
 }

@@ -3,7 +3,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::PgPool;
 
-use crate::error::AppError;
+use crate::{error::AppError, routes::stats};
 
 #[derive(Debug, Deserialize)]
 pub struct UpdatePayload {
@@ -42,6 +42,7 @@ pub async fn delete_entry(
         return Err(AppError::NotFound);
     }
 
+    let _ = stats::invalidate(&pool).await;
     Ok(Json(json!({ "deleted": true, "id": id })))
 }
 
@@ -86,5 +87,6 @@ pub async fn update_entry(
         return Err(AppError::NotFound);
     }
 
+    let _ = stats::invalidate(&pool).await;
     Ok(Json(json!({ "updated": true, "id": id })))
 }

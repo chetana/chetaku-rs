@@ -368,6 +368,237 @@ L'`id` est l'identifiant interne PostgreSQL.
 
 ---
 
+---
+
+## GET /strava/activities
+
+Liste les sorties Strava depuis la DB.
+
+**Paramètres query :**
+
+| Paramètre | Requis | Valeurs |
+|---|---|---|
+| `sport` | non | `cycling`, `running`, `swimming` — absent = toutes |
+
+**Exemples :**
+```
+GET /strava/activities              → toutes les activités
+GET /strava/activities?sport=cycling → sorties vélo
+GET /strava/activities?sport=running → sorties course
+```
+
+**Réponse 200 :**
+```json
+[
+  {
+    "id": 12345678,
+    "name": "Sortie matinale",
+    "sport_type": "Ride",
+    "start_date": "2025-04-15T06:30:00Z",
+    "distance_m": 45200.5,
+    "moving_time_s": 5400,
+    "elapsed_time_s": 5800,
+    "elevation_gain_m": 320.0,
+    "average_speed_ms": 8.37,
+    "max_speed_ms": 14.2,
+    "average_watts": 185.0,
+    "average_heartrate": 148.0,
+    "max_heartrate": 172.0,
+    "average_cadence": 88.0,
+    "calories": 980.0,
+    "kudos_count": 5,
+    "pr_count": 1,
+    "trainer": false,
+    "commute": false,
+    "map_polyline": "abcdef...",
+    "synced_at": "2025-04-15T10:00:00Z"
+  }
+]
+```
+
+---
+
+## GET /strava/stats
+
+Retourne des statistiques agrégées des activités Strava. Résultat mis en cache dans `stats_cache` (TTL 30s).
+
+**Paramètres query :**
+
+| Paramètre | Requis | Valeurs |
+|---|---|---|
+| `sport` | non | `cycling`, `running`, `swimming` — absent = toutes |
+
+**Réponse 200 :**
+```json
+{
+  "total_rides": 275,
+  "total_km": 4936.0,
+  "total_elevation_m": 32450.0,
+  "total_moving_time_s": 648000,
+  "best_ride_km": 100.1,
+  "best_elevation_m": 363.5,
+  "average_km_per_ride": 17.9,
+  "monthly": [
+    { "month": "2025-04", "km": 53.3, "elevation_m": 234.0, "rides": 1 }
+  ],
+  "by_sport_type": [
+    { "sport_type": "Ride", "count": 250, "km": 4500.0 },
+    { "sport_type": "VirtualRide", "count": 25, "km": 436.0 }
+  ],
+  "top_rides": [
+    {
+      "id": 12345678,
+      "name": "Gran Fondo",
+      "start_date": "2025-06-01T07:00:00Z",
+      "distance_m": 100112.0,
+      "elevation_gain_m": 363.5,
+      "moving_time_s": 12600,
+      "average_speed_ms": 7.95
+    }
+  ]
+}
+```
+
+`monthly` couvre les 12 derniers mois. `top_rides` = top 5 par distance.
+
+---
+
+## POST /strava/sync
+
+Synchronise toutes les activités depuis l'API Strava (pagination complète). Requiert `x-api-key`.
+
+**Body :** aucun
+
+**Comportement :**
+- Rafraîchit l'access token via le `STRAVA_REFRESH_TOKEN`
+- Pagine `GET /athlete/activities?per_page=200&page=N` jusqu'à réponse vide
+- 400ms entre chaque page (rate limit Strava : 100 req/15min)
+- Upsert dans `strava_activities` (conflit sur `id`)
+- Après sync : invalide toutes les clés `strava_%` de `stats_cache`
+
+**Réponse 200 :**
+```json
+{ "synced": 275, "total": 275 }
+```
+
+---
+
+---
+
+## GET /voyage
+
+Liste tous les voyages, triés par `date_start DESC`.
+
+**Réponse 200 :**
+```json
+[
+  {
+    "id": 1,
+    "title": "Cambodge — mars 2024",
+    "country_code": "KH",
+    "country_name": "Cambodge",
+    "continent": "Asie",
+    "date_start": "2024-03-10",
+    "date_end": "2024-03-25",
+    "lat": 11.55,
+    "lng": 104.9167,
+    "distance_km": 17500,
+    "cover_gcs_path": "voyages/cambodge-2024/cover.jpg",
+    "notes": "Angkor Wat au lever du soleil.",
+    "created_at": "2025-01-01T00:00:00Z"
+  }
+]
+```
+
+---
+
+## GET /voyage/stats
+
+Statistiques agrégées des voyages. Résultat mis en cache (`voyage_stats`, TTL 30s).
+
+**Réponse 200 :**
+```json
+{
+  "total_trips": 12,
+  "total_countries": 8,
+  "total_km": 145000,
+  "continents": ["Asie", "Europe"],
+  "by_year": [
+    { "year": 2024, "trips": 3 },
+    { "year": 2023, "trips": 2 }
+  ]
+}
+```
+
+---
+
+## POST /voyage
+
+Crée un voyage. Requiert `x-api-key`.
+
+**Body :**
+```json
+{
+  "title": "Cambodge — mars 2024",
+  "country_code": "KH",
+  "country_name": "Cambodge",
+  "continent": "Asie",
+  "date_start": "2024-03-10",
+  "date_end": "2024-03-25",
+  "lat": 11.55,
+  "lng": 104.9167,
+  "distance_km": 17500,
+  "cover_gcs_path": "voyages/cambodge-2024/cover.jpg",
+  "notes": "Angkor Wat au lever du soleil."
+}
+```
+
+`cover_gcs_path` et `notes` sont optionnels.
+
+**Réponse 200 :**
+```json
+{ "created": true, "id": 1 }
+```
+
+---
+
+## PATCH /voyage/{id}
+
+Met à jour un voyage. Requiert `x-api-key`. Tous les champs sont optionnels.
+
+**Body :**
+```json
+{
+  "title": "Cambodge — mars 2024 ✨",
+  "notes": "Texte mis à jour",
+  "cover_gcs_path": "voyages/cambodge-2024/cover-v2.jpg",
+  "distance_km": 18000
+}
+```
+
+**Réponse 200 :**
+```json
+{ "updated": true, "id": 1 }
+```
+
+---
+
+## DELETE /voyage/{id}
+
+Supprime un voyage. Requiert `x-api-key`.
+
+**Réponse 200 :**
+```json
+{ "deleted": true, "id": 1 }
+```
+
+**Réponse 404 :**
+```json
+{ "error": "not found" }
+```
+
+---
+
 ## Codes d'erreur
 
 | Code | Description |

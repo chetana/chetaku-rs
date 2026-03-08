@@ -3,18 +3,21 @@
 ## Vue d'ensemble
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    chetana.dev (Nuxt)                     │
-│                                                           │
-│  app/pages/passions/medialist/     server/api/medialist/  │
-│  ├── index.vue (liste + stats)     ├── search.get.ts      │
-│  └── [slug].vue (détail + chat)    ├── add.post.ts        │
-│                                    ├── update.post.ts     │
-│                                    ├── [id].delete.ts     │
-│                                    ├── detail.get.ts      │
-│                                    └── chat.post.ts       │
-└────────────────────┬──────────────────────────────────────┘
-                     │ HTTP + x-api-key
+┌──────────────────────────────────────────────────────────────────────┐
+│                       chetana.dev (Nuxt)                              │
+│                                                                       │
+│  /passions/medialist/              server/api/medialist/              │
+│  ├── index.vue (liste + stats)     ├── search.get.ts                 │
+│  └── [slug].vue (détail + chat)    ├── add.post.ts                   │
+│                                    ├── [id].patch.ts                 │
+│                                    ├── [id].delete.ts                │
+│                                    ├── detail.get.ts                 │
+│                                    └── chat.post.ts                  │
+│                                                                       │
+│  /passions/velo|natation|course ──── direct fetch (pas de proxy)     │
+└────────────────────┬─────────────────────────────────────────────────┘
+                     │ HTTP + x-api-key (médiathèque)
+                     │ HTTP public (strava)
                      │
          ┌───────────▼──────────────┐
          │        chetaku-rs        │
@@ -23,26 +26,29 @@
          │  GET  /media             │
          │  GET  /media/{type}/{id} │
          │  GET  /stats             │
-         │  POST /sync/anime        │
-         │  POST /sync/game         │
-         │  POST /sync/movie        │
-         │  POST /sync/series       │
+         │  POST /sync/anime|game   │
+         │  POST /sync/movie|series │
          │  PATCH /media/{id}       │
          │  DELETE /media/{id}      │
+         │                          │
+         │  GET  /strava/activities │
+         │  GET  /strava/stats      │
+         │  POST /strava/sync       │
          └──────────┬───────────────┘
                     │
-         ┌──────────▼───────────────┐
-         │    Neon PostgreSQL       │
-         │    (media_entries)       │
-         └──────────────────────────┘
+         ┌──────────▼──────────────────────┐
+         │    Neon PostgreSQL               │
+         │    ├── media_entries             │
+         │    ├── strava_activities         │
+         │    ├── voyages                   │
+         │    └── stats_cache (TTL 30s)     │
+         └──────────────────────────────────┘
 
-                    ┌──────────┐   ┌──────────────┐   ┌──────────┐
-Sync sources :      │  Jikan   │   │     RAWG     │   │   TMDB   │
-                    │ (MAL v4) │   │  (games v1)  │   │  (v3)    │
-                    └────┬─────┘   └──────┬───────┘   └────┬─────┘
-                         │                │                 │
-                    POST /sync/anime  POST /sync/game  POST /sync/movie
-                                                       POST /sync/series
+                    ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
+Sync sources :      │  Jikan   │   │   RAWG   │   │   TMDB   │   │  Strava  │
+                    │ (MAL v4) │   │ (v1)     │   │  (v3)    │   │  API v3  │
+                    └────┬─────┘   └────┬─────┘   └────┬─────┘   └────┬─────┘
+                    /sync/anime    /sync/game  /sync/movie|series  /strava/sync
 ```
 
 ## Stack technique
@@ -71,18 +77,20 @@ chetaku-rs/
 │   │   ├── mod.rs
 │   │   ├── health.rs    # GET /health
 │   │   ├── media.rs     # GET /media, GET /media/{type}/{id}
-│   │   ├── stats.rs     # GET /stats → toutes les agrégations
-│   │   ├── sync.rs      # POST /sync/anime, /sync/game, /sync/movie, /sync/series
-│   │   ├── update.rs    # PATCH /media/{id}
-│   │   └── delete.rs    # DELETE /media/{id}
+│   │   ├── stats.rs     # GET /stats → agrégations médiathèque + cache DB
+│   │   ├── cycling.rs   # GET /strava/activities|stats + POST /strava/sync
+│   │   ├── voyage.rs    # GET /voyage, GET /voyage/stats, POST/PATCH/DELETE /voyage
+│   │   ├── sync.rs      # POST /sync/anime|game|movie|series (protégés)
+│   │   └── update.rs    # PATCH /media/{id} + DELETE /media/{id} (protégés)
 │   └── sync/
 │       ├── mod.rs
 │       ├── jikan.rs     # Jikan API v4 → AnimeData normalisé
 │       ├── rawg.rs      # RAWG API v1 → GameData normalisé
-│       └── tmdb.rs      # TMDB API v3 → MovieData, SeriesData normalisés
+│       ├── tmdb.rs      # TMDB API v3 → MovieData, SeriesData normalisés
+│       └── strava.rs    # Strava API → get_access_token() + fetch_all_activities()
 ├── migrations/          # Fichiers SQL (appliqués au démarrage)
 ├── Cargo.toml
-├── Dockerfile           # (si présent) pour Cloud Run
+├── Dockerfile
 └── docs/
     ├── API.md
     └── ARCHITECTURE.md
@@ -195,6 +203,46 @@ Les mêmes agrégations sont calculées pour `movie` et `series` (top genres, sc
 
 `total_episodes_watched` agrège `episodes_watched` pour `media_type IN ('anime', 'series')`.
 
+## Cache DB (`stats_cache`)
+
+Les agrégations de stats sont coûteuses (10+ requêtes SQL en parallèle). Pour éviter de les recalculer à chaque visite — et puisque Cloud Run scale à zéro (pas d'état en mémoire persistant) — les résultats sont stockés dans une table `stats_cache` (Neon PostgreSQL).
+
+**Stratégie :**
+1. Handler reçoit une requête → `SELECT value FROM stats_cache WHERE key = $1 AND computed_at > NOW() - interval '30 seconds'`
+2. Si hit → retourne le JSONB stocké directement (très rapide : ~50ms)
+3. Si miss (cache absent ou expiré) → calcule, sérialise en JSON, `UPSERT` dans `stats_cache`, retourne le résultat
+
+**Clés de cache :**
+
+| Clé | Endpoint | Invalidée par |
+|---|---|---|
+| `media_stats` | `GET /stats` | `PATCH /media/{id}`, `DELETE /media/{id}`, après sync |
+| `strava_cycling` | `GET /strava/stats?sport=cycling` | `POST /strava/sync` |
+| `strava_running` | `GET /strava/stats?sport=running` | `POST /strava/sync` |
+| `strava_swimming` | `GET /strava/stats?sport=swimming` | `POST /strava/sync` |
+| `strava_all` | `GET /strava/stats` | `POST /strava/sync` |
+| `voyage_stats` | `GET /voyage/stats` | `POST/PATCH/DELETE /voyage` |
+
+Invalidation Strava : `DELETE FROM stats_cache WHERE key LIKE 'strava_%'` après chaque sync réussie.
+
+## Synchronisation Strava
+
+`src/sync/strava.rs` :
+- `get_access_token()` : POST `https://www.strava.com/api/v3/oauth/token` avec `grant_type=refresh_token` → retourne l'access token (valide 6h)
+- `fetch_all_activities(access_token)` : pagination `GET /athlete/activities?per_page=200&page=N` jusqu'à réponse vide, 400ms entre pages
+
+Sport types Strava mappés :
+- `cycling` → `[Ride, VirtualRide, MountainBikeRide, GravelRide, EBikeRide, Velomobile]`
+- `running` → `[Run, TrailRun, VirtualRun]`
+- `swimming` → `[Swim, OpenWaterSwim]`
+
+Obtention du `refresh_token` (une seule fois) :
+```
+1. GET https://www.strava.com/oauth/authorize?client_id=...&scope=activity:read_all&...
+2. Autoriser → récupérer code= dans l'URL
+3. POST /oauth/token avec code + grant_type=authorization_code → refresh_token permanent
+```
+
 ## Déploiement Cloud Run
 
 ```bash
@@ -211,5 +259,10 @@ Variables d'environnement configurées dans Cloud Run :
 - `API_KEY` — Clé secrète pour les endpoints protégés
 - `RAWG_API_KEY` — Clé API RAWG
 - `TMDB_API_KEY` — Clé API TMDB
+- `STRAVA_CLIENT_ID` — ID de l'application Strava
+- `STRAVA_CLIENT_SECRET` — Secret de l'application Strava
+- `STRAVA_REFRESH_TOKEN` — Token permanent Strava OAuth
+
+⚠️ `gcloud run deploy --source` remet les env vars à zéro : toujours relancer `gcloud run services update --update-env-vars KEY=VALUE,...` après un redéploiement depuis les sources.
 
 URL du service : `https://chetaku-rs-267131866578.europe-west1.run.app`

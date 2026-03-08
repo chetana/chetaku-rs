@@ -5,6 +5,7 @@ use sqlx::PgPool;
 use crate::{
     error::AppError,
     models::{SyncAnimePayload, SyncGamePayload, SyncMoviePayload, SyncSeriesPayload},
+    routes::stats,
     sync::{jikan, rawg, tmdb},
 };
 
@@ -61,6 +62,7 @@ pub async fn sync_anime(
         }
     }
 
+    if synced > 0 { let _ = stats::invalidate(&pool).await; }
     Ok(Json(json!({ "synced": synced, "total": payload.mal_ids.len() })))
 }
 
@@ -104,6 +106,7 @@ pub async fn sync_game(
         }
     }
 
+    if synced > 0 { let _ = stats::invalidate(&pool).await; }
     Ok(Json(json!({ "synced": synced, "total": payload.rawg_ids.len() })))
 }
 
@@ -148,6 +151,7 @@ pub async fn sync_movie(
         }
     }
 
+    if synced > 0 { let _ = stats::invalidate(&pool).await; }
     Ok(Json(json!({ "synced": synced, "total": payload.tmdb_ids.len() })))
 }
 
@@ -193,5 +197,6 @@ pub async fn sync_series(
         }
     }
 
+    if synced > 0 { let _ = stats::invalidate(&pool).await; }
     Ok(Json(json!({ "synced": synced, "total": payload.tmdb_ids.len() })))
 }

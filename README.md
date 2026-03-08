@@ -2,7 +2,7 @@
 
 API REST en Rust pour la médiathèque personnelle de **Chetana YIN** — suivi d'animés, de jeux vidéo, de films et de séries.
 
-**Consommé par** : [chetana.dev/passions/medialist](https://chetana.dev/passions/medialist)
+**Consommé par** : [chetana.dev/passions](https://chetana.dev/passions) — Médiathèque, Vélo, Natation, Course, Voyage
 
 **Live** : `https://chetaku-rs-267131866578.europe-west1.run.app`
 
@@ -23,7 +23,11 @@ API REST en Rust pour la médiathèque personnelle de **Chetana YIN** — suivi 
 | `/health` | GET | Healthcheck `{"status":"ok","service":"chetaku-rs"}` |
 | `/media` | GET | Liste des entrées (filtrables par `type` et `status`) |
 | `/media/{media_type}/{external_id}` | GET | Détail d'une entrée |
-| `/stats` | GET | Statistiques agrégées (genres, scores, studios, etc.) |
+| `/stats` | GET | Statistiques agrégées médiathèque (genres, scores, studios, etc.) |
+| `/strava/activities` | GET | Liste des sorties Strava (filtrables par `sport`) |
+| `/strava/stats` | GET | Statistiques Strava agrégées par sport |
+| `/voyage` | GET | Liste des voyages (triés par date décroissante) |
+| `/voyage/stats` | GET | Stats voyages (pays, continents, km, by_year) — cache 30s |
 
 ### Protégés (header `x-api-key`)
 
@@ -33,8 +37,12 @@ API REST en Rust pour la médiathèque personnelle de **Chetana YIN** — suivi 
 | `/sync/game` | POST | Synchronise des jeux depuis RAWG |
 | `/sync/movie` | POST | Synchronise des films depuis TMDB |
 | `/sync/series` | POST | Synchronise des séries depuis TMDB |
+| `/strava/sync` | POST | Synchronise toutes les activités Strava |
 | `/media/{id}` | PATCH | Met à jour une entrée (status, score, notes, etc.) |
 | `/media/{id}` | DELETE | Supprime une entrée |
+| `/voyage` | POST | Crée un voyage |
+| `/voyage/{id}` | PATCH | Met à jour un voyage (title, notes, cover_gcs_path, distance_km) |
+| `/voyage/{id}` | DELETE | Supprime un voyage |
 
 ## Paramètres de requête
 
@@ -44,6 +52,12 @@ API REST en Rust pour la médiathèque personnelle de **Chetana YIN** — suivi 
 |---|---|---|
 | `type` | `anime` \| `game` \| `movie` \| `series` | Filtrer par type |
 | `status` | `completed` \| `watching` \| `playing` \| `dropped` \| `plan_to_watch` \| `plan_to_play` | Filtrer par statut |
+
+### `GET /strava/activities` et `GET /strava/stats`
+
+| Paramètre | Type | Description |
+|---|---|---|
+| `sport` | `cycling` \| `running` \| `swimming` | Filtrer par type de sport — absent = toutes |
 
 ### `POST /sync/anime`
 
@@ -106,6 +120,8 @@ Supprime l'entrée. Requiert `x-api-key`.
 
 ## Base de données
 
+### Table `media_entries`
+
 Une table principale `media_entries` :
 
 | Colonne | Type | Description |
@@ -133,6 +149,68 @@ Contrainte d'unicité : `(media_type, external_id)` — pas de doublons.
 
 Pas de migration ALTER TABLE nécessaire pour les nouveaux types — `media_type` est stocké en TEXT, les nouvelles valeurs fonctionnent directement.
 
+### Table `strava_activities`
+
+| Colonne | Type | Description |
+|---|---|---|
+| `id` | bigint PK | ID Strava |
+| `name` | text | Nom de la sortie |
+| `sport_type` | text | `Ride`, `VirtualRide`, `Run`, `Swim`, etc. |
+| `start_date` | timestamptz | Date/heure de départ |
+| `distance_m` | float8 | Distance en mètres |
+| `moving_time_s` | integer | Temps en mouvement (secondes) |
+| `elapsed_time_s` | integer | Temps total (secondes) |
+| `elevation_gain_m` | float8 | Dénivelé positif (mètres) |
+| `average_speed_ms` | float8 | Vitesse moyenne (m/s) |
+| `average_watts` | float8 | Puissance moyenne (watts, si capteur) |
+| `average_heartrate` | float8 | FC moyenne |
+| `average_cadence` | float8 | Cadence moyenne (tr/min) |
+| `calories` | float8 | Calories estimées |
+| `kudos_count` | integer | Nombre de kudos Strava |
+| `trainer` | boolean | Sortie sur home trainer |
+| `commute` | boolean | Trajet domicile-travail |
+| `map_polyline` | text | Tracé encodé (Google Polyline) |
+| `synced_at` | timestamptz | Dernière sync |
+
+### Table `voyages`
+
+| Colonne | Type | Description |
+|---|---|---|
+| `id` | serial PK | Identifiant interne |
+| `title` | text | Titre du voyage (`"Cambodge — mars 2024"`) |
+| `country_code` | char(2) | Code ISO 3166-1 alpha-2 (`"KH"`) |
+| `country_name` | text | Nom du pays (`"Cambodge"`) |
+| `continent` | text | Continent (`"Asie"`, `"Europe"`, etc.) |
+| `date_start` | date | Début du séjour |
+| `date_end` | date | Fin du séjour |
+| `lat` | float8 | Latitude du centroïde (pour marqueur carte) |
+| `lng` | float8 | Longitude du centroïde |
+| `distance_km` | integer | Distance aller-retour estimée (km) |
+| `cover_gcs_path` | text | Chemin GCS de la photo de couverture (nullable) |
+| `notes` | text | Anecdote en markdown (nullable) |
+| `created_at` | timestamptz | Date de création |
+| `updated_at` | timestamptz | Date de dernière modification |
+
+### Table `stats_cache`
+
+Cache DB-persisté pour les calculs d'agrégation coûteux. TTL : 30 secondes.
+
+| Colonne | Type | Description |
+|---|---|---|
+| `key` | text PK | Identifiant du cache |
+| `value` | jsonb | Résultat JSON de l'agrégation |
+| `computed_at` | timestamptz | Horodatage du dernier calcul |
+
+**Clés utilisées :**
+- `media_stats` — résultat de `GET /stats`
+- `strava_cycling` — résultat de `GET /strava/stats?sport=cycling`
+- `strava_running` — résultat de `GET /strava/stats?sport=running`
+- `strava_swimming` — résultat de `GET /strava/stats?sport=swimming`
+- `strava_all` — résultat de `GET /strava/stats` (sans filtre)
+- `voyage_stats` — résultat de `GET /voyage/stats`
+
+Invalidation : automatique après sync (`DELETE WHERE key LIKE 'strava_%'`) et après update/delete média (`DELETE WHERE key = 'media_stats'`).
+
 ## Variables d'environnement
 
 | Variable | Description |
@@ -141,6 +219,9 @@ Pas de migration ALTER TABLE nécessaire pour les nouveaux types — `media_type
 | `API_KEY` | Clé secrète pour les endpoints protégés |
 | `RAWG_API_KEY` | Clé API RAWG (rawg.io) pour la sync jeux |
 | `TMDB_API_KEY` | Clé API TMDB (themoviedb.org) pour la sync films/séries |
+| `STRAVA_CLIENT_ID` | ID de l'application Strava |
+| `STRAVA_CLIENT_SECRET` | Secret de l'application Strava |
+| `STRAVA_REFRESH_TOKEN` | Token permanent (obtenu une seule fois via OAuth) |
 | `PORT` | Port d'écoute (défaut : 8080) |
 
 ## Setup local
@@ -186,14 +267,16 @@ src/
   routes/
     health.rs      # GET /health
     media.rs       # GET /media, GET /media/{type}/{id}
-    stats.rs       # GET /stats → agrégations complètes
+    stats.rs       # GET /stats → agrégations médiathèque + cache DB
     sync.rs        # POST /sync/anime, /sync/game, /sync/movie, /sync/series (protégés)
-    update.rs      # PATCH /media/{id} (protégé)
-    delete.rs      # DELETE /media/{id} (protégé)
+    cycling.rs     # GET /strava/activities, GET /strava/stats, POST /strava/sync
+    voyage.rs      # GET /voyage, GET /voyage/stats, POST/PATCH/DELETE /voyage
+    update.rs      # PATCH /media/{id} + DELETE /media/{id} (protégés)
   sync/
     jikan.rs       # Jikan API v4 (MyAnimeList) → AnimeData
     rawg.rs        # RAWG API v1 → GameData
     tmdb.rs        # TMDB API → MovieData, SeriesData
+    strava.rs      # Strava API → get_access_token() + fetch_all_activities()
 migrations/        # Migrations SQL (appliquées au démarrage)
 ```
 

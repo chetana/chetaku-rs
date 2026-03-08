@@ -131,10 +131,7 @@ pub async fn list(
 
 // ── GET /strava/stats ─────────────────────────────────────────────────────────
 
-pub async fn stats(
-    State(pool): State<PgPool>,
-    Query(params): Query<SportQuery>,
-) -> Result<Json<CyclingStats>, AppError> {
+async fn compute_stats(pool: &PgPool, types: &[String]) -> Result<CyclingStats, AppError> {
     #[derive(sqlx::FromRow)]
     struct Totals {
         total_rides: Option<i64>,
@@ -145,19 +142,18 @@ pub async fn stats(
         best_elevation_m: Option<f64>,
     }
 
-    let types = sport_types(&params.sport);
     let filtered = !types.is_empty();
 
     macro_rules! q {
         ($sql:expr, one, $T:ty) => {{
             let mut query = sqlx::query_as::<_, $T>($sql);
-            if filtered { query = query.bind(&types); }
-            query.fetch_one(&pool).await.map_err(AppError::Db)?
+            if filtered { query = query.bind(types); }
+            query.fetch_one(pool).await.map_err(AppError::Db)?
         }};
         ($sql:expr, all, $T:ty) => {{
             let mut query = sqlx::query_as::<_, $T>($sql);
-            if filtered { query = query.bind(&types); }
-            query.fetch_all(&pool).await.map_err(AppError::Db)?
+            if filtered { query = query.bind(types); }
+            query.fetch_all(pool).await.map_err(AppError::Db)?
         }};
     }
 
@@ -198,7 +194,7 @@ pub async fn stats(
          ORDER BY distance_m DESC LIMIT 5"
     );
 
-    let t: Totals         = q!(&sql_totals,  one, Totals);
+    let t: Totals                    = q!(&sql_totals,  one, Totals);
     let monthly: Vec<MonthlyTotal>   = q!(&sql_monthly, all, MonthlyTotal);
     let by_type: Vec<SportTypeStat>  = q!(&sql_by_type, all, SportTypeStat);
     let top: Vec<TopRide>            = q!(&sql_top,     all, TopRide);
@@ -207,7 +203,7 @@ pub async fn stats(
     let total_km = t.total_km.unwrap_or(0.0);
     let average_km = if total_rides > 0 { total_km / total_rides as f64 } else { 0.0 };
 
-    Ok(Json(CyclingStats {
+    Ok(CyclingStats {
         total_rides,
         total_km,
         total_elevation_m: t.total_elevation_m.unwrap_or(0.0),
@@ -218,7 +214,46 @@ pub async fn stats(
         monthly,
         by_sport_type: by_type,
         top_rides: top,
-    }))
+    })
+}
+
+pub async fn stats(
+    State(pool): State<PgPool>,
+    Query(params): Query<SportQuery>,
+) -> Result<Json<Value>, AppError> {
+    let sport = params.sport.as_deref().unwrap_or("all");
+    let cache_key = format!("strava_{sport}");
+
+    // 1 requête rapide — JSONB en cache si < 30s
+    let cached: Option<Value> = sqlx::query_scalar(
+        "SELECT value FROM stats_cache WHERE key = $1 AND computed_at > NOW() - interval '30 seconds'"
+    )
+    .bind(&cache_key)
+    .fetch_optional(&pool)
+    .await
+    .map_err(AppError::Db)?;
+
+    if let Some(v) = cached {
+        return Ok(Json(v));
+    }
+
+    // Cache absent ou expiré → recompute
+    let types = sport_types(&params.sport);
+    let result = compute_stats(&pool, &types).await?;
+    let value = serde_json::to_value(&result)
+        .map_err(|e| AppError::ExternalApi(format!("strava stats serialize: {e}")))?;
+
+    sqlx::query(
+        "INSERT INTO stats_cache (key, value, computed_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, computed_at = NOW()"
+    )
+    .bind(&cache_key)
+    .bind(&value)
+    .execute(&pool)
+    .await
+    .map_err(AppError::Db)?;
+
+    Ok(Json(value))
 }
 
 // ── POST /cycling/sync ────────────────────────────────────────────────────────
@@ -279,6 +314,13 @@ pub async fn sync(
             Ok(_) => synced += 1,
             Err(e) => tracing::warn!("Failed to upsert activity {}: {e}", a.id),
         }
+    }
+
+    // Invalide les 3 caches strava
+    if let Err(e) = sqlx::query("DELETE FROM stats_cache WHERE key LIKE 'strava_%'")
+        .execute(&pool).await
+    {
+        tracing::warn!("Failed to invalidate strava stats cache: {e}");
     }
 
     Ok(Json(json!({ "synced": synced, "total": total })))
