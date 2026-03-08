@@ -102,16 +102,7 @@ pub struct StravaActivity {
     pub map_polyline: Option<String>,
 }
 
-const CYCLING_TYPES: &[&str] = &[
-    "Ride",
-    "VirtualRide",
-    "MountainBikeRide",
-    "GravelRide",
-    "EBikeRide",
-    "Velomobile",
-];
-
-// ── Fetch all cycling activities (paginated) ──────────────────────────────────
+// ── Fetch all activities (paginated) — vélo, natation, course, etc. ──────────
 
 pub async fn fetch_all_activities(access_token: &str) -> Result<Vec<StravaActivity>, AppError> {
     let client = reqwest::Client::new();
@@ -147,9 +138,6 @@ pub async fn fetch_all_activities(access_token: &str) -> Result<Vec<StravaActivi
         }
 
         for a in raw {
-            if !CYCLING_TYPES.contains(&a.sport_type.as_str()) {
-                continue;
-            }
             // kilojoules → kcal approximation (1 kJ ≈ 0.239 kcal)
             let calories = a.kilojoules.map(|kj| kj * 0.239);
             // Only include watts if device measured (not estimated)
@@ -188,6 +176,6 @@ pub async fn fetch_all_activities(access_token: &str) -> Result<Vec<StravaActivi
         sleep(Duration::from_millis(400)).await;
     }
 
-    tracing::info!("Strava: fetched {} cycling activities", all.len());
+    tracing::info!("Strava: fetched {} activities", all.len());
     Ok(all)
 }

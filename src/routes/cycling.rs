@@ -1,4 +1,5 @@
-use axum::{extract::State, http::HeaderMap, Json};
+use axum::{extract::{Query, State}, http::HeaderMap, Json};
+use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::PgPool;
@@ -84,29 +85,55 @@ pub struct CyclingStats {
     pub top_rides: Vec<TopRide>,
 }
 
-// ── GET /cycling/activities ───────────────────────────────────────────────────
+// ── Sport type helpers ────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct SportQuery {
+    pub sport: Option<String>, // "cycling" | "running" | "swimming" | absent = all
+}
+
+fn sport_types(sport: &Option<String>) -> Vec<String> {
+    match sport.as_deref() {
+        Some("cycling") => vec!["Ride", "VirtualRide", "MountainBikeRide", "GravelRide", "EBikeRide", "Velomobile"],
+        Some("running") => vec!["Run", "TrailRun", "VirtualRun"],
+        Some("swimming") => vec!["Swim", "OpenWaterSwim"],
+        _ => vec![],
+    }.into_iter().map(String::from).collect()
+}
+
+// ── GET /strava/activities ────────────────────────────────────────────────────
 
 pub async fn list(
     State(pool): State<PgPool>,
+    Query(params): Query<SportQuery>,
 ) -> Result<Json<Vec<CyclingActivity>>, AppError> {
-    let activities = sqlx::query_as::<_, CyclingActivity>(
-        "SELECT id, name, sport_type, start_date, distance_m, moving_time_s, elapsed_time_s,
-                elevation_gain_m, average_speed_ms, max_speed_ms, average_watts,
-                average_heartrate, max_heartrate, average_cadence, calories,
-                kudos_count, pr_count, trainer, commute, map_polyline, synced_at
-         FROM strava_activities
-         ORDER BY start_date DESC"
-    )
-    .fetch_all(&pool)
-    .await?;
+    let types = sport_types(&params.sport);
+    let activities = if types.is_empty() {
+        sqlx::query_as::<_, CyclingActivity>(
+            "SELECT id, name, sport_type, start_date, distance_m, moving_time_s, elapsed_time_s,
+                    elevation_gain_m, average_speed_ms, max_speed_ms, average_watts,
+                    average_heartrate, max_heartrate, average_cadence, calories,
+                    kudos_count, pr_count, trainer, commute, map_polyline, synced_at
+             FROM strava_activities ORDER BY start_date DESC"
+        ).fetch_all(&pool).await?
+    } else {
+        sqlx::query_as::<_, CyclingActivity>(
+            "SELECT id, name, sport_type, start_date, distance_m, moving_time_s, elapsed_time_s,
+                    elevation_gain_m, average_speed_ms, max_speed_ms, average_watts,
+                    average_heartrate, max_heartrate, average_cadence, calories,
+                    kudos_count, pr_count, trainer, commute, map_polyline, synced_at
+             FROM strava_activities WHERE sport_type = ANY($1) ORDER BY start_date DESC"
+        ).bind(&types[..]).fetch_all(&pool).await?
+    };
 
     Ok(Json(activities))
 }
 
-// ── GET /cycling/stats ────────────────────────────────────────────────────────
+// ── GET /strava/stats ─────────────────────────────────────────────────────────
 
 pub async fn stats(
     State(pool): State<PgPool>,
+    Query(params): Query<SportQuery>,
 ) -> Result<Json<CyclingStats>, AppError> {
     #[derive(sqlx::FromRow)]
     struct Totals {
@@ -118,49 +145,64 @@ pub async fn stats(
         best_elevation_m: Option<f64>,
     }
 
-    let (totals, monthly, by_type, top) = tokio::join!(
-        sqlx::query_as::<_, Totals>(
-            "SELECT
-               COUNT(*)::BIGINT as total_rides,
-               COALESCE(SUM(distance_m) / 1000.0, 0)::FLOAT8 as total_km,
-               COALESCE(SUM(elevation_gain_m), 0)::FLOAT8 as total_elevation_m,
-               COALESCE(SUM(moving_time_s)::BIGINT, 0) as total_moving_time_s,
-               COALESCE(MAX(distance_m) / 1000.0, 0)::FLOAT8 as best_ride_km,
-               COALESCE(MAX(elevation_gain_m), 0)::FLOAT8 as best_elevation_m
-             FROM strava_activities"
-        ).fetch_one(&pool),
+    let types = sport_types(&params.sport);
+    let filtered = !types.is_empty();
 
-        sqlx::query_as::<_, MonthlyTotal>(
-            "SELECT
-               TO_CHAR(start_date, 'YYYY-MM') as month,
-               ROUND((SUM(distance_m) / 1000.0)::numeric, 1)::FLOAT8 as km,
-               ROUND(SUM(elevation_gain_m)::numeric, 0)::FLOAT8 as elevation_m,
-               COUNT(*)::BIGINT as rides
-             FROM strava_activities
-             WHERE start_date >= NOW() - INTERVAL '12 months'
-             GROUP BY month
-             ORDER BY month ASC"
-        ).fetch_all(&pool),
+    macro_rules! q {
+        ($sql:expr, one, $T:ty) => {{
+            let mut query = sqlx::query_as::<_, $T>($sql);
+            if filtered { query = query.bind(&types); }
+            query.fetch_one(&pool).await.map_err(AppError::Db)?
+        }};
+        ($sql:expr, all, $T:ty) => {{
+            let mut query = sqlx::query_as::<_, $T>($sql);
+            if filtered { query = query.bind(&types); }
+            query.fetch_all(&pool).await.map_err(AppError::Db)?
+        }};
+    }
 
-        sqlx::query_as::<_, SportTypeStat>(
-            "SELECT
-               sport_type,
-               COUNT(*)::BIGINT as count,
-               ROUND((SUM(distance_m) / 1000.0)::numeric, 1)::FLOAT8 as km
-             FROM strava_activities
-             GROUP BY sport_type
-             ORDER BY count DESC"
-        ).fetch_all(&pool),
+    let w = if filtered { " WHERE sport_type = ANY($1)" } else { "" };
+    let wm = if filtered {
+        "WHERE sport_type = ANY($1) AND start_date >= NOW() - INTERVAL '12 months'"
+    } else {
+        "WHERE start_date >= NOW() - INTERVAL '12 months'"
+    };
 
-        sqlx::query_as::<_, TopRide>(
-            "SELECT id, name, start_date, distance_m, elevation_gain_m, moving_time_s, average_speed_ms
-             FROM strava_activities
-             ORDER BY distance_m DESC
-             LIMIT 5"
-        ).fetch_all(&pool),
+    let sql_totals = format!(
+        "SELECT COUNT(*)::BIGINT as total_rides,
+                COALESCE(SUM(distance_m)/1000.0,0)::FLOAT8 as total_km,
+                COALESCE(SUM(elevation_gain_m),0)::FLOAT8 as total_elevation_m,
+                COALESCE(SUM(moving_time_s)::BIGINT,0) as total_moving_time_s,
+                COALESCE(MAX(distance_m)/1000.0,0)::FLOAT8 as best_ride_km,
+                COALESCE(MAX(elevation_gain_m),0)::FLOAT8 as best_elevation_m
+         FROM strava_activities{w}"
+    );
+    let sql_monthly = format!(
+        "SELECT TO_CHAR(start_date,'YYYY-MM') as month,
+                ROUND((SUM(distance_m)/1000.0)::numeric,1)::FLOAT8 as km,
+                ROUND(SUM(elevation_gain_m)::numeric,0)::FLOAT8 as elevation_m,
+                COUNT(*)::BIGINT as rides
+         FROM strava_activities {wm}
+         GROUP BY month ORDER BY month ASC"
+    );
+    let sql_by_type = format!(
+        "SELECT sport_type,
+                COUNT(*)::BIGINT as count,
+                ROUND((SUM(distance_m)/1000.0)::numeric,1)::FLOAT8 as km
+         FROM strava_activities{w}
+         GROUP BY sport_type ORDER BY count DESC"
+    );
+    let sql_top = format!(
+        "SELECT id, name, start_date, distance_m, elevation_gain_m, moving_time_s, average_speed_ms
+         FROM strava_activities{w}
+         ORDER BY distance_m DESC LIMIT 5"
     );
 
-    let t: Totals = totals.map_err(AppError::Db)?;
+    let t: Totals         = q!(&sql_totals,  one, Totals);
+    let monthly: Vec<MonthlyTotal>   = q!(&sql_monthly, all, MonthlyTotal);
+    let by_type: Vec<SportTypeStat>  = q!(&sql_by_type, all, SportTypeStat);
+    let top: Vec<TopRide>            = q!(&sql_top,     all, TopRide);
+
     let total_rides = t.total_rides.unwrap_or(0);
     let total_km = t.total_km.unwrap_or(0.0);
     let average_km = if total_rides > 0 { total_km / total_rides as f64 } else { 0.0 };
@@ -173,9 +215,9 @@ pub async fn stats(
         best_ride_km: t.best_ride_km.unwrap_or(0.0),
         best_elevation_m: t.best_elevation_m.unwrap_or(0.0),
         average_km_per_ride: (average_km * 10.0).round() / 10.0,
-        monthly: monthly.map_err(AppError::Db)?,
-        by_sport_type: by_type.map_err(AppError::Db)?,
-        top_rides: top.map_err(AppError::Db)?,
+        monthly,
+        by_sport_type: by_type,
+        top_rides: top,
     }))
 }
 

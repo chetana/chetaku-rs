@@ -12,6 +12,7 @@ pub struct MediaQuery {
     #[serde(rename = "type")]
     pub media_type: Option<String>,
     pub status: Option<String>,
+    pub q: Option<String>,
 }
 
 const SELECT: &str =
@@ -24,20 +25,43 @@ pub async fn list(
     State(pool): State<PgPool>,
     Query(params): Query<MediaQuery>,
 ) -> Result<Json<Vec<MediaEntry>>, AppError> {
-    let entries = match (&params.media_type, &params.status) {
-        (Some(t), Some(s)) => {
-            sqlx::query_as::<_, MediaEntry>(&format!("{SELECT} WHERE media_type = $1 AND status = $2 ORDER BY created_at DESC"))
-                .bind(t).bind(s).fetch_all(&pool).await?
-        }
-        (Some(t), None) => {
-            sqlx::query_as::<_, MediaEntry>(&format!("{SELECT} WHERE media_type = $1 ORDER BY created_at DESC"))
-                .bind(t).fetch_all(&pool).await?
-        }
-        _ => {
-            sqlx::query_as::<_, MediaEntry>(&format!("{SELECT} ORDER BY created_at DESC"))
-                .fetch_all(&pool).await?
-        }
+    let mut conditions: Vec<String> = vec![];
+    let mut idx: u32 = 1;
+
+    if params.media_type.is_some() {
+        conditions.push(format!("media_type = ${idx}"));
+        idx += 1;
+    }
+    if params.status.is_some() {
+        conditions.push(format!("status = ${idx}"));
+        idx += 1;
+    }
+    if params.q.is_some() {
+        conditions.push(format!(
+            "(title ILIKE ${idx} OR title_original ILIKE ${idx})"
+        ));
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
     };
+
+    let sql = format!("{SELECT} {where_clause} ORDER BY created_at DESC");
+    let mut query = sqlx::query_as::<_, MediaEntry>(&sql);
+
+    if let Some(t) = &params.media_type {
+        query = query.bind(t);
+    }
+    if let Some(s) = &params.status {
+        query = query.bind(s);
+    }
+    if let Some(q) = &params.q {
+        query = query.bind(format!("%{q}%"));
+    }
+
+    let entries = query.fetch_all(&pool).await?;
     Ok(Json(entries))
 }
 

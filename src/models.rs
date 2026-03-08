@@ -7,13 +7,15 @@ use serde::{Deserialize, Serialize};
 pub enum MediaType {
     Anime,
     Game,
+    Movie,
+    Series,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "text")]
 #[serde(rename_all = "snake_case")]
 pub enum MediaStatus {
-    // Anime
+    // Anime / Séries
     Watching,
     // Jeux
     Playing,
@@ -66,4 +68,16 @@ pub struct SyncGamePayload {
     pub rawg_ids: Vec<i32>,
     pub status: Option<String>,
     pub platform: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SyncMoviePayload {
+    pub tmdb_ids: Vec<i32>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SyncSeriesPayload {
+    pub tmdb_ids: Vec<i32>,
+    pub status: Option<String>,
 }

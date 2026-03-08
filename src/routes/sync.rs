@@ -4,8 +4,8 @@ use sqlx::PgPool;
 
 use crate::{
     error::AppError,
-    models::{SyncAnimePayload, SyncGamePayload},
-    sync::{jikan, rawg},
+    models::{SyncAnimePayload, SyncGamePayload, SyncMoviePayload, SyncSeriesPayload},
+    sync::{jikan, rawg, tmdb},
 };
 
 fn check_api_key(headers: &HeaderMap) -> Result<(), AppError> {
@@ -105,4 +105,93 @@ pub async fn sync_game(
     }
 
     Ok(Json(json!({ "synced": synced, "total": payload.rawg_ids.len() })))
+}
+
+pub async fn sync_movie(
+    State(pool): State<PgPool>,
+    headers: HeaderMap,
+    Json(payload): Json<SyncMoviePayload>,
+) -> Result<Json<Value>, AppError> {
+    check_api_key(&headers)?;
+
+    let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
+    let status = payload.status.as_deref().unwrap_or("completed").to_string();
+    let mut synced = 0usize;
+
+    for tmdb_id in &payload.tmdb_ids {
+        match tmdb::fetch_movie(*tmdb_id, &api_key).await {
+            Ok(e) => {
+                sqlx::query(
+                    "INSERT INTO media_entries
+                     (media_type, external_id, title, title_original, status,
+                      cover_url, genres, creator, year, synced_at)
+                     VALUES ('movie', $1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                     ON CONFLICT (media_type, external_id) DO UPDATE SET
+                       title = EXCLUDED.title, title_original = EXCLUDED.title_original,
+                       cover_url = EXCLUDED.cover_url, genres = EXCLUDED.genres,
+                       creator = EXCLUDED.creator, year = EXCLUDED.year,
+                       synced_at = NOW()"
+                )
+                .bind(e.tmdb_id)
+                .bind(&e.title)
+                .bind(&e.title_original)
+                .bind(&status)
+                .bind(&e.cover_url)
+                .bind(&e.genres)
+                .bind(&e.creator)
+                .bind(e.year)
+                .execute(&pool)
+                .await?;
+                synced += 1;
+            }
+            Err(err) => tracing::warn!("Failed to sync movie {tmdb_id}: {err}"),
+        }
+    }
+
+    Ok(Json(json!({ "synced": synced, "total": payload.tmdb_ids.len() })))
+}
+
+pub async fn sync_series(
+    State(pool): State<PgPool>,
+    headers: HeaderMap,
+    Json(payload): Json<SyncSeriesPayload>,
+) -> Result<Json<Value>, AppError> {
+    check_api_key(&headers)?;
+
+    let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
+    let status = payload.status.as_deref().unwrap_or("completed").to_string();
+    let mut synced = 0usize;
+
+    for tmdb_id in &payload.tmdb_ids {
+        match tmdb::fetch_series(*tmdb_id, &api_key).await {
+            Ok(e) => {
+                sqlx::query(
+                    "INSERT INTO media_entries
+                     (media_type, external_id, title, title_original, status,
+                      episodes_total, cover_url, genres, creator, year, synced_at)
+                     VALUES ('series', $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+                     ON CONFLICT (media_type, external_id) DO UPDATE SET
+                       title = EXCLUDED.title, title_original = EXCLUDED.title_original,
+                       episodes_total = EXCLUDED.episodes_total, cover_url = EXCLUDED.cover_url,
+                       genres = EXCLUDED.genres, creator = EXCLUDED.creator,
+                       year = EXCLUDED.year, synced_at = NOW()"
+                )
+                .bind(e.tmdb_id)
+                .bind(&e.title)
+                .bind(&e.title_original)
+                .bind(&status)
+                .bind(e.episodes_total)
+                .bind(&e.cover_url)
+                .bind(&e.genres)
+                .bind(&e.creator)
+                .bind(e.year)
+                .execute(&pool)
+                .await?;
+                synced += 1;
+            }
+            Err(err) => tracing::warn!("Failed to sync series {tmdb_id}: {err}"),
+        }
+    }
+
+    Ok(Json(json!({ "synced": synced, "total": payload.tmdb_ids.len() })))
 }

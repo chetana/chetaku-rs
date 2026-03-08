@@ -26,6 +26,25 @@ fn check_api_key(headers: &HeaderMap) -> Result<(), AppError> {
     Ok(())
 }
 
+pub async fn delete_entry(
+    State(pool): State<PgPool>,
+    headers: HeaderMap,
+    Path(id): Path<i32>,
+) -> Result<Json<Value>, AppError> {
+    check_api_key(&headers)?;
+
+    let result = sqlx::query("DELETE FROM media_entries WHERE id = $1")
+        .bind(id)
+        .execute(&pool)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+
+    Ok(Json(json!({ "deleted": true, "id": id })))
+}
+
 pub async fn update_entry(
     State(pool): State<PgPool>,
     headers: HeaderMap,

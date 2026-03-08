@@ -1,0 +1,215 @@
+# Architecture — chetaku-rs
+
+## Vue d'ensemble
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                    chetana.dev (Nuxt)                     │
+│                                                           │
+│  app/pages/passions/medialist/     server/api/medialist/  │
+│  ├── index.vue (liste + stats)     ├── search.get.ts      │
+│  └── [slug].vue (détail + chat)    ├── add.post.ts        │
+│                                    ├── update.post.ts     │
+│                                    ├── [id].delete.ts     │
+│                                    ├── detail.get.ts      │
+│                                    └── chat.post.ts       │
+└────────────────────┬──────────────────────────────────────┘
+                     │ HTTP + x-api-key
+                     │
+         ┌───────────▼──────────────┐
+         │        chetaku-rs        │
+         │  (Axum / Cloud Run)      │
+         │                          │
+         │  GET  /media             │
+         │  GET  /media/{type}/{id} │
+         │  GET  /stats             │
+         │  POST /sync/anime        │
+         │  POST /sync/game         │
+         │  POST /sync/movie        │
+         │  POST /sync/series       │
+         │  PATCH /media/{id}       │
+         │  DELETE /media/{id}      │
+         └──────────┬───────────────┘
+                    │
+         ┌──────────▼───────────────┐
+         │    Neon PostgreSQL       │
+         │    (media_entries)       │
+         └──────────────────────────┘
+
+                    ┌──────────┐   ┌──────────────┐   ┌──────────┐
+Sync sources :      │  Jikan   │   │     RAWG     │   │   TMDB   │
+                    │ (MAL v4) │   │  (games v1)  │   │  (v3)    │
+                    └────┬─────┘   └──────┬───────┘   └────┬─────┘
+                         │                │                 │
+                    POST /sync/anime  POST /sync/game  POST /sync/movie
+                                                       POST /sync/series
+```
+
+## Stack technique
+
+| Couche | Technologie | Justification |
+|---|---|---|
+| Framework HTTP | Axum 0.8 | Ergonomique, type-safe, basé sur Tower |
+| Runtime async | Tokio | Standard de facto pour l'async Rust |
+| Base de données | sqlx 0.8 + Neon PostgreSQL | Requêtes async, compile-time checks |
+| Hébergement | Google Cloud Run | Serverless, scale to zero, région `europe-west1` |
+| Logs | tracing + tracing-subscriber | Structured logging, compatible Cloud Run |
+| Erreurs | thiserror + anyhow | Conversions ergonomiques, messages clairs |
+| HTTP client | reqwest 0.12 | Appels vers Jikan, RAWG et TMDB |
+| Sérialisation | serde + serde_json | Standard Rust |
+
+## Structure du code
+
+```
+chetaku-rs/
+├── src/
+│   ├── main.rs          # Axum router, CORS, TcpListener, tokio::main
+│   ├── db.rs            # create_pool() + run_migrations()
+│   ├── error.rs         # AppError → codes HTTP + JSON
+│   ├── models.rs        # MediaEntry, MediaType, MediaStatus, payloads
+│   ├── routes/
+│   │   ├── mod.rs
+│   │   ├── health.rs    # GET /health
+│   │   ├── media.rs     # GET /media, GET /media/{type}/{id}
+│   │   ├── stats.rs     # GET /stats → toutes les agrégations
+│   │   ├── sync.rs      # POST /sync/anime, /sync/game, /sync/movie, /sync/series
+│   │   ├── update.rs    # PATCH /media/{id}
+│   │   └── delete.rs    # DELETE /media/{id}
+│   └── sync/
+│       ├── mod.rs
+│       ├── jikan.rs     # Jikan API v4 → AnimeData normalisé
+│       ├── rawg.rs      # RAWG API v1 → GameData normalisé
+│       └── tmdb.rs      # TMDB API v3 → MovieData, SeriesData normalisés
+├── migrations/          # Fichiers SQL (appliqués au démarrage)
+├── Cargo.toml
+├── Dockerfile           # (si présent) pour Cloud Run
+└── docs/
+    ├── API.md
+    └── ARCHITECTURE.md
+```
+
+## Gestion des erreurs
+
+`AppError` (src/error.rs) mappe les erreurs internes vers des réponses HTTP JSON :
+
+| Variant | HTTP | Cas |
+|---|---|---|
+| `AppError::Db(sqlx::Error)` | 500 | Erreur base de données |
+| `AppError::NotFound` | 404 | Entrée inexistante |
+| `AppError::ExternalApi(String)` | 502 | Jikan, RAWG ou TMDB inaccessible |
+| `AppError::Unauthorized` | 401 | Clé API absente ou invalide |
+
+Toutes les routes retournent `Result<Json<T>, AppError>`. L'implémentation `IntoResponse` d'`AppError` transforme automatiquement les erreurs en réponse `{ "error": "..." }`.
+
+## Authentification
+
+Les endpoints en lecture (`GET /media`, `GET /stats`) sont publics — pas d'auth requise.
+
+Les endpoints d'écriture (`POST /sync/*`, `PATCH /media/{id}`, `DELETE /media/{id}`) lisent le header `x-api-key` et le comparent à la variable d'environnement `API_KEY`.
+
+## CORS
+
+Configuré dans `main.rs` via `tower_http::cors::CorsLayer` :
+
+```rust
+CorsLayer::new()
+    .allow_origin(["https://chetana.dev", "http://localhost:3000"])
+    .allow_methods(...)
+    .allow_headers(...)
+```
+
+Permet à chetana.dev (Vercel) et au dev local d'appeler l'API.
+
+## Migrations
+
+Les migrations SQL sont dans `migrations/` et appliquées au démarrage du service via `sqlx::migrate!()`. Format : `{timestamp}_{description}.sql`.
+
+Pas de migration ALTER TABLE nécessaire pour les types `movie` et `series` — la colonne `media_type` est de type TEXT, les nouvelles valeurs (`'movie'`, `'series'`) sont insérées directement sans modifier le schéma.
+
+## Synchronisation Jikan (MyAnimeList)
+
+`src/sync/jikan.rs` appelle `https://api.jikan.moe/v4/anime/{mal_id}/full`.
+
+Normalisation :
+- Image : `images.jpg.large_image_url` (fallback sur `image_url`)
+- Genres : `genres[].name` (tableau de strings)
+- Studio : `studios[0].name` (premier studio uniquement)
+- Année : `year` (peut être null si en cours de diffusion)
+
+Rate limiting : `tokio::time::sleep(Duration::from_millis(400))` entre chaque appel pour respecter la limite de 3 req/sec de Jikan.
+
+Upsert SQL :
+```sql
+INSERT INTO media_entries (...) VALUES (...)
+ON CONFLICT (media_type, external_id)
+DO UPDATE SET title = EXCLUDED.title, ...
+```
+
+## Synchronisation RAWG
+
+`src/sync/rawg.rs` appelle `https://api.rawg.io/api/games/{rawg_id}?key={RAWG_API_KEY}`.
+
+Normalisation :
+- Genres : `genres[].name`
+- Développeur : `developers[0].name` (premier développeur uniquement)
+- Année : extrait des 4 premiers caractères de `released` (`"YYYY-MM-DD"`)
+
+## Synchronisation TMDB
+
+`src/sync/tmdb.rs` appelle l'API TMDB v3 (`api.themoviedb.org/3`) avec `?api_key={TMDB_API_KEY}&language=fr-FR`.
+
+### Films (`/sync/movie`)
+
+Pour chaque TMDB ID :
+- `GET /movie/{id}` — titre, synopsis, genres, année, runtime, tagline
+- `GET /movie/{id}/credits` — directeur (premier `crew` avec `job == "Director"`)
+- Cover : `https://image.tmdb.org/t/p/w500{poster_path}`
+
+### Séries (`/sync/series`)
+
+Pour chaque TMDB ID :
+- `GET /tv/{id}` — titre, synopsis, genres, année, créateur (`created_by[0].name`), nombre de saisons, total d'épisodes
+- Cover : `https://image.tmdb.org/t/p/w500{poster_path}`
+
+TMDB a été choisi pour les films et séries — seule API gratuite viable offrant des métadonnées complètes en français.
+
+## Agrégations stats (love_score)
+
+La formule `love_score = count × avg_score` équilibre :
+- **Fréquence** : un genre présent dans 50 animés a plus de poids qu'un genre dans 2
+- **Qualité** : un genre avec une note moyenne de 9 est préféré à un genre noté 5
+
+SQL (avec cast `::float8` obligatoire — sqlx sans feature `bigdecimal` ne peut pas décoder `NUMERIC`) :
+
+```sql
+SELECT genre,
+       COUNT(*) as count,
+       ROUND(AVG(score::float)::numeric, 2)::float8 as avg_score,
+       ROUND((COUNT(*) * AVG(score::float))::numeric, 2)::float8 as love_score
+FROM media_entries, UNNEST(genres) AS genre
+WHERE media_type = 'anime' AND score IS NOT NULL
+GROUP BY genre ORDER BY love_score DESC LIMIT 10
+```
+
+Les mêmes agrégations sont calculées pour `movie` et `series` (top genres, score distribution, statuts, créateurs).
+
+`total_episodes_watched` agrège `episodes_watched` pour `media_type IN ('anime', 'series')`.
+
+## Déploiement Cloud Run
+
+```bash
+gcloud run deploy chetaku-rs \
+  --source . \
+  --region europe-west1 \
+  --allow-unauthenticated
+```
+
+Cloud Run build automatiquement l'image Docker depuis le `Cargo.toml` (buildpacks GCP ou Dockerfile). Le service scale à zéro quand inactif.
+
+Variables d'environnement configurées dans Cloud Run :
+- `DATABASE_URL` — URL Neon PostgreSQL
+- `API_KEY` — Clé secrète pour les endpoints protégés
+- `RAWG_API_KEY` — Clé API RAWG
+- `TMDB_API_KEY` — Clé API TMDB
+
+URL du service : `https://chetaku-rs-267131866578.europe-west1.run.app`

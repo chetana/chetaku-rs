@@ -46,9 +46,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/sync/series",               post(routes::sync::sync_series))
         .route("/media/{id}",                patch(routes::update::update_entry)
                                              .delete(routes::update::delete_entry))
-        .route("/cycling/activities",        get(routes::cycling::list))
-        .route("/cycling/stats",             get(routes::cycling::stats))
-        .route("/cycling/sync",              post(routes::cycling::sync))
+        .route("/strava/activities",         get(routes::cycling::list))
+        .route("/strava/stats",              get(routes::cycling::stats))
+        .route("/strava/sync",               post(routes::cycling::sync))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(pool);
