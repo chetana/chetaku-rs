@@ -120,6 +120,7 @@ pub async fn sync_movie(
     let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
     let status = payload.status.as_deref().unwrap_or("completed").to_string();
     let mut synced = 0usize;
+    let mut last_error: Option<String> = None;
 
     for tmdb_id in &payload.tmdb_ids {
         match tmdb::fetch_movie(*tmdb_id, &api_key).await {
@@ -147,12 +148,23 @@ pub async fn sync_movie(
                 .await?;
                 synced += 1;
             }
-            Err(err) => tracing::warn!("Failed to sync movie {tmdb_id}: {err}"),
+            Err(err) => {
+                tracing::warn!("Failed to sync movie {tmdb_id}: {err}");
+                last_error = Some(err.to_string());
+            }
         }
     }
 
     if synced > 0 { let _ = stats::invalidate(&pool).await; }
-    Ok(Json(json!({ "synced": synced, "total": payload.tmdb_ids.len() })))
+
+    let total = payload.tmdb_ids.len();
+    if synced == 0 && total > 0 {
+        return Err(AppError::ExternalApi(
+            last_error.unwrap_or_else(|| "TMDB fetch failed".to_string())
+        ));
+    }
+
+    Ok(Json(json!({ "synced": synced, "total": total })))
 }
 
 pub async fn sync_series(
@@ -165,6 +177,7 @@ pub async fn sync_series(
     let api_key = std::env::var("TMDB_API_KEY").unwrap_or_default();
     let status = payload.status.as_deref().unwrap_or("completed").to_string();
     let mut synced = 0usize;
+    let mut last_error: Option<String> = None;
 
     for tmdb_id in &payload.tmdb_ids {
         match tmdb::fetch_series(*tmdb_id, &api_key).await {
@@ -193,10 +206,21 @@ pub async fn sync_series(
                 .await?;
                 synced += 1;
             }
-            Err(err) => tracing::warn!("Failed to sync series {tmdb_id}: {err}"),
+            Err(err) => {
+                tracing::warn!("Failed to sync series {tmdb_id}: {err}");
+                last_error = Some(err.to_string());
+            }
         }
     }
 
     if synced > 0 { let _ = stats::invalidate(&pool).await; }
-    Ok(Json(json!({ "synced": synced, "total": payload.tmdb_ids.len() })))
+
+    let total = payload.tmdb_ids.len();
+    if synced == 0 && total > 0 {
+        return Err(AppError::ExternalApi(
+            last_error.unwrap_or_else(|| "TMDB fetch failed".to_string())
+        ));
+    }
+
+    Ok(Json(json!({ "synced": synced, "total": total })))
 }
