@@ -2,17 +2,17 @@
 
 ## Deploy
 
-**Toujours utiliser `deploy.sh` pour déployer**, jamais `gcloud run deploy` directement :
+**Toujours utiliser `deploy.sh`**, jamais `gcloud run deploy` directement :
 
 ```bash
 bash deploy.sh
 ```
 
-Ce script :
-1. Déploie sur Cloud Run (`gcloud run deploy --source .`)
-2. Restaure immédiatement toutes les env vars depuis `.env`
+Ce script passe `--set-env-vars` **dans le même appel** `gcloud run deploy --source .` → une seule révision créée, env vars garanties.
 
-⚠️ `gcloud run deploy --source .` efface les env vars à chaque deploy — `deploy.sh` les remet automatiquement.
+⚠️ **Ne JAMAIS faire séparément :**
+- `gcloud run deploy --source .` seul → efface toutes les env vars
+- `gcloud run services update --update-env-vars ...` via PowerShell → crée des doubles révisions (PowerShell exécute gcloud.cmd deux fois), ce qui peut écraser les vars avec des valeurs partielles
 
 ## Env vars
 
