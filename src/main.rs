@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/stats",                     get(routes::stats::handler))
         .route("/sync/anime",                post(routes::sync::sync_anime))
         .route("/sync/game",                 post(routes::sync::sync_game))
-        .route("/media/:id",                 patch(routes::update::update_entry))
+        .route("/media/{id}",                patch(routes::update::update_entry))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(pool);
