@@ -4,7 +4,7 @@ mod models;
 mod routes;
 mod sync;
 
-use axum::{Router, routing::get, routing::post};
+use axum::{Router, routing::{get, patch, post}};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -42,6 +42,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/stats",                     get(routes::stats::handler))
         .route("/sync/anime",                post(routes::sync::sync_anime))
         .route("/sync/game",                 post(routes::sync::sync_game))
+        .route("/media/:id",                 patch(routes::update::update_entry))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(pool);
