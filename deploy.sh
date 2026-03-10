@@ -26,13 +26,11 @@ fi
 
 echo "Deploy $SERVICE ($REGION) avec $(echo "$ENV_VARS" | tr ',' '\n' | wc -l | tr -d ' ') env vars..."
 
-# Utiliser gcloud.cmd sur Windows si disponible
-GCLOUD="gcloud"
-if [ -f "/c/Users/cheta/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud.cmd" ]; then
-  GCLOUD="cmd.exe /c gcloud.cmd"
-fi
+GCLOUD_REAL="/c/Users/cheta/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud"
+CLOUDSDK_PYTHON="/c/Users/cheta/AppData/Local/Google/Cloud SDK/google-cloud-sdk/platform/bundledpython/python.exe"
+export CLOUDSDK_PYTHON
 
-$GCLOUD run deploy "$SERVICE" \
+"$GCLOUD_REAL" run deploy "$SERVICE" \
   --source . \
   --region "$REGION" \
   --allow-unauthenticated \
