@@ -1,10 +1,14 @@
 # chetaku-rs
 
-API REST en Rust pour la médiathèque personnelle de **Chetana YIN** — suivi d'animés, de jeux vidéo, de films et de séries.
+API REST en Rust — backend public et admin du portfolio de **Chetana YIN** : médiathèque, Strava, voyages, blog, projets, expériences, skills.
 
-**Consommé par** : [chetana.dev/passions](https://chetana.dev/passions) — Médiathèque, Vélo, Natation, Course, Voyage
+**Consommé par** :
+- [chetana.dev](https://chetana.dev) — portfolio (blog, projets, CV, skills, commentaires)
+- [chetana.dev/passions](https://chetana.dev/passions) — Médiathèque, Vélo, Natation, Course, Voyage
+- [admin.chetana.dev](https://admin.chetana.dev) — backoffice (via proxy `chetana-admin`)
 
-**Live** : `https://chetaku-rs-267131866578.europe-west1.run.app`
+**URL custom** : `https://api.chetana.dev`
+**URL Cloud Run** : `https://chetaku-rs-267131866578.europe-west1.run.app`
 
 ## Stack
 
@@ -20,29 +24,44 @@ API REST en Rust pour la médiathèque personnelle de **Chetana YIN** — suivi 
 
 | Endpoint | Méthode | Description |
 |---|---|---|
-| `/health` | GET | Healthcheck `{"status":"ok","service":"chetaku-rs"}` |
-| `/media` | GET | Liste des entrées (filtrables par `type` et `status`) |
+| `/health` | GET | Healthcheck |
+| `/media` | GET | Liste des entrées médiathèque (filtrables par `type` et `status`) |
 | `/media/{media_type}/{external_id}` | GET | Détail d'une entrée |
-| `/stats` | GET | Statistiques agrégées médiathèque (genres, scores, studios, etc.) |
+| `/stats` | GET | Statistiques agrégées médiathèque |
 | `/strava/activities` | GET | Liste des sorties Strava (filtrables par `sport`) |
-| `/strava/stats` | GET | Statistiques Strava agrégées par sport |
-| `/voyage` | GET | Liste des voyages (triés par date décroissante) |
-| `/voyage/stats` | GET | Stats voyages (pays, continents, km, by_year) — cache 30s |
+| `/strava/stats` | GET | Statistiques Strava agrégées |
+| `/voyage` | GET | Liste des voyages |
+| `/voyage/stats` | GET | Stats voyages — cache 30s |
+| `/blog` | GET | Articles de blog publiés |
+| `/blog/{slug}` | GET | Article par slug |
+| `/projects` | GET | Projets du portfolio |
+| `/projects/{slug}` | GET | Projet par slug |
+| `/experiences` | GET | Expériences professionnelles |
+| `/skills` | GET | Skills groupés par catégorie |
+| `/comments/{post_id}` | GET | Commentaires approuvés d'un article |
+| `/comments` | POST | Soumettre un commentaire (anti-spam) |
+| `/messages` | POST | Formulaire de contact (honeypot) |
 
 ### Protégés (header `x-api-key`)
 
 | Endpoint | Méthode | Description |
 |---|---|---|
-| `/sync/anime` | POST | Synchronise des animés depuis Jikan (MyAnimeList) |
-| `/sync/game` | POST | Synchronise des jeux depuis RAWG |
-| `/sync/movie` | POST | Synchronise des films depuis TMDB |
-| `/sync/series` | POST | Synchronise des séries depuis TMDB |
-| `/strava/sync` | POST | Synchronise toutes les activités Strava |
-| `/media/{id}` | PATCH | Met à jour une entrée (status, score, notes, etc.) |
-| `/media/{id}` | DELETE | Supprime une entrée |
+| `/sync/anime` | POST | Sync animés depuis Jikan (MyAnimeList) |
+| `/sync/game` | POST | Sync jeux depuis RAWG |
+| `/sync/movie` | POST | Sync films depuis TMDB |
+| `/sync/series` | POST | Sync séries depuis TMDB |
+| `/strava/sync` | POST | Sync activités Strava |
+| `/media/{id}` | PATCH/DELETE | Update/supprime une entrée médiathèque |
 | `/voyage` | POST | Crée un voyage |
-| `/voyage/{id}` | PATCH | Met à jour un voyage (title, notes, cover_gcs_path, distance_km) |
-| `/voyage/{id}` | DELETE | Supprime un voyage |
+| `/voyage/{id}` | PATCH/DELETE | Update/supprime un voyage |
+| `/blog` | POST | Crée un article |
+| `/blog/{slug}` | PATCH/DELETE | Update/supprime un article |
+| `/projects` | POST | Crée un projet |
+| `/projects/{slug}` | PATCH/DELETE | Update/supprime un projet |
+| `/experiences` | POST | Crée une expérience |
+| `/experiences/{id}` | PATCH/DELETE | Update/supprime une expérience |
+| `/skills` | POST | Crée un skill |
+| `/skills/{id}` | PATCH/DELETE | Update/supprime un skill |
 
 ## Paramètres de requête
 
@@ -248,13 +267,10 @@ cargo build --release
 ## Déploiement (Cloud Run)
 
 ```bash
-gcloud run deploy chetaku-rs \
-  --source . \
-  --region europe-west1 \
-  --allow-unauthenticated
+bash deploy.sh
 ```
 
-Les variables d'environnement sont configurées dans Cloud Run via Secret Manager ou directement dans la console.
+Le script `deploy.sh` lit le fichier `.env` et passe toutes les variables via `--set-env-vars` dans un seul appel `gcloud run deploy --source .` → une seule révision, env vars garanties.
 
 ## Structure du projet
 
@@ -268,10 +284,14 @@ src/
     health.rs      # GET /health
     media.rs       # GET /media, GET /media/{type}/{id}
     stats.rs       # GET /stats → agrégations médiathèque + cache DB
-    sync.rs        # POST /sync/anime, /sync/game, /sync/movie, /sync/series (protégés)
-    cycling.rs     # GET /strava/activities, GET /strava/stats, POST /strava/sync
-    voyage.rs      # GET /voyage, GET /voyage/stats, POST/PATCH/DELETE /voyage
-    update.rs      # PATCH /media/{id} + DELETE /media/{id} (protégés)
+    sync.rs        # POST /sync/anime|game|movie|series (protégés)
+    cycling.rs     # GET /strava/activities|stats, POST /strava/sync
+    voyage.rs      # GET/POST/PATCH/DELETE /voyage
+    update.rs      # PATCH/DELETE /media/{id} (protégés)
+    blog.rs        # GET /blog, GET /blog/{slug}
+    portfolio.rs   # GET /projects, /experiences, /skills
+    contact.rs     # GET/POST /comments, POST /messages
+    admin.rs       # CRUD protégés blog, projects, experiences, skills
   sync/
     jikan.rs       # Jikan API v4 (MyAnimeList) → AnimeData
     rawg.rs        # RAWG API v1 → GameData

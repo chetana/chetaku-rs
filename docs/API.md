@@ -1,6 +1,7 @@
 # API — chetaku-rs
 
-Base URL : `https://chetaku-rs-267131866578.europe-west1.run.app`
+Base URL custom : `https://api.chetana.dev`
+Base URL Cloud Run : `https://chetaku-rs-267131866578.europe-west1.run.app`
 
 ## Authentification
 
@@ -604,6 +605,7 @@ Supprime un voyage. Requiert `x-api-key`.
 | Code | Description |
 |---|---|
 | `200` | Succès |
+| `400` | Validation — champ requis manquant ou invalide |
 | `401` | `x-api-key` absent ou invalide |
 | `404` | Ressource introuvable |
 | `500` | Erreur base de données |
@@ -613,3 +615,115 @@ Format d'erreur :
 ```json
 { "error": "description de l'erreur" }
 ```
+
+---
+
+## Portfolio (publics)
+
+### GET /blog
+
+Articles publiés, triés par date décroissante.
+
+**Réponse 200 :** tableau de `{ id, slug, title_fr, title_en, title_km?, excerpt_fr, excerpt_en, excerpt_km?, tags, created_at, updated_at }`
+
+### GET /blog/{slug}
+
+Article complet par slug (champs + `content_fr`, `content_en`, `content_km?`). `404` si non publié.
+
+### GET /projects
+
+Projets triés par date décroissante. Champs : `{ id, slug, title_fr, title_en, description_fr, description_en, tags, github_url?, demo_url?, image_url?, project_type?, featured, created_at }`
+
+### GET /projects/{slug}
+
+Projet par slug.
+
+### GET /experiences
+
+Expériences triées par `sort_order ASC`. Champs : `{ id, company, role_fr, role_en, date_start, date_end?, location?, bullets_fr, bullets_en, sort_order }`
+
+### GET /skills
+
+Skills triés par catégorie puis `sort_order`. Champs : `{ id, category, name, color?, sort_order? }`
+
+---
+
+## Contact (publics)
+
+### GET /comments/{post_id}
+
+Commentaires approuvés d'un article, triés par date décroissante.
+
+**Réponse 200 :** `[{ id, post_id, author_name, content, created_at }]`
+
+### POST /comments
+
+Soumet un commentaire. Anti-spam : longueur max 1000 chars, max 2 liens http.
+
+**Body :**
+```json
+{
+  "post_id": 1,
+  "author_name": "Alice",
+  "content": "Super article !",
+  "honeypot": ""
+}
+```
+
+**Réponse 200 :** `{ "created": true }`
+
+### POST /messages
+
+Formulaire de contact. Honeypot via champ `honeypot` (doit être vide).
+
+**Body :**
+```json
+{
+  "name": "Alice",
+  "email": "alice@example.com",
+  "content": "Bonjour !",
+  "honeypot": ""
+}
+```
+
+**Réponse 200 :** `{ "created": true }`
+
+---
+
+## Admin — write endpoints (protégés `x-api-key`)
+
+Consommés exclusivement par `admin.chetana.dev` via le proxy `chetana-admin` (qui injecte la clé).
+
+### Blog
+
+| Méthode | Endpoint | Description |
+|---|---|---|
+| POST | `/blog` | Crée un article (`slug`, `title_fr`, `title_en`, `content_fr`, `content_en`, `excerpt_fr`, `excerpt_en` requis) |
+| PATCH | `/blog/{slug}` | Met à jour les champs fournis + `updated_at = NOW()` |
+| DELETE | `/blog/{slug}` | Supprime l'article |
+
+### Projects
+
+| Méthode | Endpoint | Description |
+|---|---|---|
+| POST | `/projects` | Crée un projet (`slug`, `title_fr`, `title_en`, `description_fr`, `description_en` requis) |
+| PATCH | `/projects/{slug}` | Met à jour les champs fournis |
+| DELETE | `/projects/{slug}` | Supprime le projet |
+
+### Experiences
+
+| Méthode | Endpoint | Description |
+|---|---|---|
+| POST | `/experiences` | Crée une expérience (`company`, `role_fr`, `role_en`, `date_start` requis) |
+| PATCH | `/experiences/{id}` | Met à jour les champs fournis |
+| DELETE | `/experiences/{id}` | Supprime l'expérience |
+
+### Skills
+
+| Méthode | Endpoint | Description |
+|---|---|---|
+| POST | `/skills` | Crée un skill (`category`, `name` requis) |
+| PATCH | `/skills/{id}` | Met à jour les champs fournis |
+| DELETE | `/skills/{id}` | Supprime le skill |
+
+Toutes les réponses write : `{ "created": true, "id": N }` ou `{ "updated": true }` ou `{ "deleted": true }`

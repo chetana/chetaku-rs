@@ -3,52 +3,53 @@
 ## Vue d'ensemble
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                       chetana.dev (Nuxt)                              │
-│                                                                       │
-│  /passions/medialist/              server/api/medialist/              │
-│  ├── index.vue (liste + stats)     ├── search.get.ts                 │
-│  └── [slug].vue (détail + chat)    ├── add.post.ts                   │
-│                                    ├── [id].patch.ts                 │
-│                                    ├── [id].delete.ts                │
-│                                    ├── detail.get.ts                 │
-│                                    └── chat.post.ts                  │
-│                                                                       │
-│  /passions/velo|natation|course ──── direct fetch (pas de proxy)     │
-└────────────────────┬─────────────────────────────────────────────────┘
-                     │ HTTP + x-api-key (médiathèque)
-                     │ HTTP public (strava)
-                     │
-         ┌───────────▼──────────────┐
-         │        chetaku-rs        │
-         │  (Axum / Cloud Run)      │
-         │                          │
-         │  GET  /media             │
-         │  GET  /media/{type}/{id} │
-         │  GET  /stats             │
-         │  POST /sync/anime|game   │
-         │  POST /sync/movie|series │
-         │  PATCH /media/{id}       │
-         │  DELETE /media/{id}      │
-         │                          │
-         │  GET  /strava/activities │
-         │  GET  /strava/stats      │
-         │  POST /strava/sync       │
-         └──────────┬───────────────┘
-                    │
-         ┌──────────▼──────────────────────┐
-         │    Neon PostgreSQL               │
-         │    ├── media_entries             │
-         │    ├── strava_activities         │
-         │    ├── voyages                   │
-         │    └── stats_cache (TTL 30s)     │
-         └──────────────────────────────────┘
+┌──────────────────────────────┐    ┌──────────────────────────────────┐
+│      chetana.dev (Nuxt)      │    │   admin.chetana.dev              │
+│                              │    │   (chetana-admin / Cloud Run)    │
+│  /passions → strava, media   │    │                                  │
+│  /blog, /projects, /cv       │    │  React + Express proxy           │
+│   └─ proxy → /api/*          │    │   └─ requireAuth (Google token)  │
+│      (server/api/ Nuxt)      │    │   └─ fetch + x-api-key          │
+└──────────────┬───────────────┘    └──────────────┬───────────────────┘
+               │ HTTP public / x-api-key            │ HTTP + x-api-key
+               └──────────────┬─────────────────────┘
+                              ▼
+              ┌─────────────────────────────────────────────┐
+              │         api.chetana.dev                     │
+              │    chetaku-rs · Axum · Cloud Run            │
+              │                                             │
+              │  Public :                                   │
+              │  GET /blog, /blog/{slug}                    │
+              │  GET /projects, /projects/{slug}            │
+              │  GET /experiences, /skills                  │
+              │  GET /comments/{post_id}                    │
+              │  POST /comments, /messages                  │
+              │  GET /media, /stats                         │
+              │  GET /strava/activities, /strava/stats      │
+              │  GET /voyage, /voyage/stats                 │
+              │                                             │
+              │  Protégés (x-api-key) :                     │
+              │  POST/PATCH/DELETE /blog                    │
+              │  POST/PATCH/DELETE /projects                │
+              │  POST/PATCH/DELETE /experiences, /skills    │
+              │  POST /sync/anime|game|movie|series         │
+              │  POST /strava/sync                          │
+              │  POST/PATCH/DELETE /voyage                  │
+              │  PATCH/DELETE /media/{id}                   │
+              └───────────────────┬─────────────────────────┘
+                                  │
+              ┌───────────────────▼──────────────────────────┐
+              │              Neon PostgreSQL                  │
+              │  ├── blog_posts      ├── media_entries        │
+              │  ├── projects        ├── strava_activities    │
+              │  ├── experiences     ├── voyages              │
+              │  ├── skills          ├── comments             │
+              │  ├── messages        └── stats_cache (TTL 30s)│
+              │  └── (users, health_entries, push_subs…)     │
+              │      ← gérés par chetana-dev (Nuxt/Drizzle)  │
+              └──────────────────────────────────────────────┘
 
-                    ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
-Sync sources :      │  Jikan   │   │   RAWG   │   │   TMDB   │   │  Strava  │
-                    │ (MAL v4) │   │ (v1)     │   │  (v3)    │   │  API v3  │
-                    └────┬─────┘   └────┬─────┘   └────┬─────┘   └────┬─────┘
-                    /sync/anime    /sync/game  /sync/movie|series  /strava/sync
+Sync sources :  Jikan(MAL) · RAWG · TMDB · Strava API
 ```
 
 ## Stack technique
@@ -71,7 +72,7 @@ chetaku-rs/
 ├── src/
 │   ├── main.rs          # Axum router, CORS, TcpListener, tokio::main
 │   ├── db.rs            # create_pool() + run_migrations()
-│   ├── error.rs         # AppError → codes HTTP + JSON
+│   ├── error.rs         # AppError (Db, NotFound, ExternalApi, Unauthorized, Validation)
 │   ├── models.rs        # MediaEntry, MediaType, MediaStatus, payloads
 │   ├── routes/
 │   │   ├── mod.rs
@@ -81,7 +82,11 @@ chetaku-rs/
 │   │   ├── cycling.rs   # GET /strava/activities|stats + POST /strava/sync
 │   │   ├── voyage.rs    # GET /voyage, GET /voyage/stats, POST/PATCH/DELETE /voyage
 │   │   ├── sync.rs      # POST /sync/anime|game|movie|series (protégés)
-│   │   └── update.rs    # PATCH /media/{id} + DELETE /media/{id} (protégés)
+│   │   ├── update.rs    # PATCH/DELETE /media/{id} (protégés)
+│   │   ├── blog.rs      # GET /blog, GET /blog/{slug}
+│   │   ├── portfolio.rs # GET /projects, /experiences, /skills
+│   │   ├── contact.rs   # GET/POST /comments, POST /messages
+│   │   └── admin.rs     # CRUD protégés blog, projects, experiences, skills
 │   └── sync/
 │       ├── mod.rs
 │       ├── jikan.rs     # Jikan API v4 → AnimeData normalisé
@@ -91,6 +96,7 @@ chetaku-rs/
 ├── migrations/          # Fichiers SQL (appliqués au démarrage)
 ├── Cargo.toml
 ├── Dockerfile
+├── deploy.sh            # Deploy Cloud Run avec env vars depuis .env
 └── docs/
     ├── API.md
     └── ARCHITECTURE.md
@@ -106,6 +112,7 @@ chetaku-rs/
 | `AppError::NotFound` | 404 | Entrée inexistante |
 | `AppError::ExternalApi(String)` | 502 | Jikan, RAWG ou TMDB inaccessible |
 | `AppError::Unauthorized` | 401 | Clé API absente ou invalide |
+| `AppError::Validation(String)` | 400 | Champ requis manquant ou invalide |
 
 Toutes les routes retournent `Result<Json<T>, AppError>`. L'implémentation `IntoResponse` d'`AppError` transforme automatiquement les erreurs en réponse `{ "error": "..." }`.
 
@@ -121,12 +128,15 @@ Configuré dans `main.rs` via `tower_http::cors::CorsLayer` :
 
 ```rust
 CorsLayer::new()
-    .allow_origin(["https://chetana.dev", "http://localhost:3000"])
-    .allow_methods(...)
-    .allow_headers(...)
+    .allow_origin([
+        "https://chetana.dev",
+        "https://chetlys.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ])
 ```
 
-Permet à chetana.dev (Vercel) et au dev local d'appeler l'API.
+Autorise chetana.dev, chet_lys (Vercel), et les deux ports de dev local (Nuxt/Vite).
 
 ## Migrations
 
