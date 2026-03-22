@@ -25,11 +25,13 @@ async fn main() -> anyhow::Result<()> {
     let pool = db::create_pool().await?;
     db::run_migrations(&pool).await?;
 
-    // CORS — autorise chetana.dev + localhost dev
+    // CORS — autorise chetana.dev + chetlys + localhost dev
     let cors = CorsLayer::new()
         .allow_origin([
             "https://chetana.dev".parse().unwrap(),
+            "https://chetlys.vercel.app".parse().unwrap(),
             "http://localhost:3000".parse().unwrap(),
+            "http://localhost:5173".parse().unwrap(),
         ])
         .allow_methods(Any)
         .allow_headers(Any);
@@ -52,6 +54,17 @@ async fn main() -> anyhow::Result<()> {
         .route("/voyage",                    get(routes::voyage::list).post(routes::voyage::create))
         .route("/voyage/stats",              get(routes::voyage::stats))
         .route("/voyage/{id}",               patch(routes::voyage::update).delete(routes::voyage::delete_voyage))
+        // Portfolio / CV
+        .route("/blog",                      get(routes::blog::list))
+        .route("/blog/{slug}",               get(routes::blog::get_one))
+        .route("/projects",                  get(routes::portfolio::list_projects))
+        .route("/projects/{slug}",           get(routes::portfolio::get_project))
+        .route("/experiences",               get(routes::portfolio::list_experiences))
+        .route("/skills",                    get(routes::portfolio::list_skills))
+        // Contact
+        .route("/comments/{post_id}",        get(routes::contact::list_comments))
+        .route("/comments",                  post(routes::contact::create_comment))
+        .route("/messages",                  post(routes::contact::create_message))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(pool);

@@ -1,6 +1,9 @@
+pub mod blog;
+pub mod contact;
 pub mod cycling;
 pub mod health;
 pub mod media;
+pub mod portfolio;
 pub mod stats;
 pub mod sync;
 pub mod update;
