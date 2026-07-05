@@ -28,6 +28,7 @@ async fn main() -> anyhow::Result<()> {
     // CORS — autorise chetana.dev + chetlys + localhost dev
     let cors = CorsLayer::new()
         .allow_origin([
+            "https://chetana.fr".parse().unwrap(),
             "https://chetana.dev".parse().unwrap(),
             "https://chetlys.vercel.app".parse().unwrap(),
             "http://localhost:3000".parse().unwrap(),
