@@ -1,7 +1,7 @@
 # API — chetaku-rs
 
-Base URL custom : `https://api.chetana.dev`
-Base URL Cloud Run : `https://chetaku-rs-267131866578.europe-west1.run.app`
+Base URL custom : `https://chetaku.chetana.fr`
+Base URL Cloud Run : `https://chetaku.chetana.fr`
 
 ## Authentification
 

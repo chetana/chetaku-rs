@@ -15,7 +15,7 @@
                └──────────────┬─────────────────────┘
                               ▼
               ┌─────────────────────────────────────────────┐
-              │         api.chetana.dev                     │
+              │         chetaku.chetana.fr                     │
               │    chetaku-rs · Axum · Cloud Run            │
               │                                             │
               │  Public :                                   │
@@ -129,7 +129,7 @@ Configuré dans `main.rs` via `tower_http::cors::CorsLayer` :
 ```rust
 CorsLayer::new()
     .allow_origin([
-        "https://chetana.dev",
+        "https://chetana.fr",
         "https://chetlys.vercel.app",
         "http://localhost:3000",
         "http://localhost:5173",
@@ -275,4 +275,4 @@ Variables d'environnement configurées dans Cloud Run :
 
 ⚠️ `gcloud run deploy --source` remet les env vars à zéro : toujours relancer `gcloud run services update --update-env-vars KEY=VALUE,...` après un redéploiement depuis les sources.
 
-URL du service : `https://chetaku-rs-267131866578.europe-west1.run.app`
+URL du service : `https://chetaku.chetana.fr`

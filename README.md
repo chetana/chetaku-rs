@@ -3,12 +3,12 @@
 API REST en Rust — backend public et admin du portfolio de **Chetana YIN** : médiathèque, Strava, voyages, blog, projets, expériences, skills.
 
 **Consommé par** :
-- [chetana.dev](https://chetana.dev) — portfolio (blog, projets, CV, skills, commentaires)
-- [chetana.dev/passions](https://chetana.dev/passions) — Médiathèque, Vélo, Natation, Course, Voyage
+- [chetana.dev](https://chetana.fr) — portfolio (blog, projets, CV, skills, commentaires)
+- [chetana.dev/passions](https://chetana.fr/passions) — Médiathèque, Vélo, Natation, Course, Voyage
 - [admin.chetana.dev](https://admin.chetana.dev) — backoffice (via proxy `chetana-admin`)
 
-**URL custom** : `https://api.chetana.dev`
-**URL Cloud Run** : `https://chetaku-rs-267131866578.europe-west1.run.app`
+**URL custom** : `https://chetaku.chetana.fr`
+**URL Cloud Run** : `https://chetaku.chetana.fr`
 
 ## Stack
 

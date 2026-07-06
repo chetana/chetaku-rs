@@ -27,14 +27,14 @@ Deploy the Rust API to Cloud Run and restore all env vars from `.env`.
    - Attendre la confirmation de révision (ex: `chetaku-rs-000XX-xxx`)
 
 4. **Post-deploy verification**
-   - `curl -s https://chetaku-rs-267131866578.europe-west1.run.app/health` → `{"status":"ok"}`
+   - `curl -s https://chetaku.chetana.fr/health` → `{"status":"ok"}`
    - Vérifier les env vars restaurées : `gcloud run services describe chetaku-rs --region europe-west1 --format='value(spec.template.spec.containers[0].env)'`
 
 5. **Report** results to the user
 
 ## Important
 - Repo : `C:\Users\cheta\repositories\chetaku-rs`
-- Service URL : `https://chetaku-rs-267131866578.europe-west1.run.app`
+- Service URL : `https://chetaku.chetana.fr`
 - Region : `europe-west1`
 - gcloud cmd path : `C:\Users\cheta\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd`
 - Pour appeler gcloud directement (sans deploy.sh) :
