@@ -106,7 +106,20 @@ fn sport_types(sport: &Option<String>) -> Vec<String> {
 pub async fn list(
     State(pool): State<PgPool>,
     Query(params): Query<SportQuery>,
-) -> Result<Json<Vec<CyclingActivity>>, AppError> {
+) -> Result<Json<Value>, AppError> {
+    // Cache 24h de la liste (461 lignes) — invalidé par le `LIKE 'strava_%'` à la synchro Strava.
+    let cache_key = format!("strava_list_{}", params.sport.as_deref().unwrap_or("all"));
+    let cached: Option<Value> = sqlx::query_scalar(
+        "SELECT value FROM stats_cache WHERE key = $1 AND computed_at > NOW() - interval '24 hours'"
+    )
+    .bind(&cache_key)
+    .fetch_optional(&pool)
+    .await
+    .map_err(AppError::Db)?;
+    if let Some(v) = cached {
+        return Ok(Json(v));
+    }
+
     let types = sport_types(&params.sport);
     let activities = if types.is_empty() {
         sqlx::query_as::<_, CyclingActivity>(
@@ -126,7 +139,17 @@ pub async fn list(
         ).bind(&types[..]).fetch_all(&pool).await?
     };
 
-    Ok(Json(activities))
+    let value = serde_json::to_value(&activities)
+        .map_err(|e| AppError::ExternalApi(format!("strava list serialize: {e}")))?;
+    let _ = sqlx::query(
+        "INSERT INTO stats_cache (key, value, computed_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, computed_at = NOW()"
+    )
+    .bind(&cache_key)
+    .bind(&value)
+    .execute(&pool)
+    .await;
+    Ok(Json(value))
 }
 
 // ── GET /strava/stats ─────────────────────────────────────────────────────────
