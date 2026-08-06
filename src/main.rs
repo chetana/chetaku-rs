@@ -5,9 +5,54 @@ mod routes;
 mod sync;
 
 use axum::{Router, routing::{get, patch, post}};
+use axum::{extract::Request, http::StatusCode, middleware::{from_fn, Next}, response::Response};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
+// ── Rate-limit par IP (protection anti-bot / anti-abus de coût) ──────────────
+// Fenêtre glissante en mémoire : RL_MAX requêtes par IP sur RL_WINDOW → 429 au-delà.
+// Best-effort : l'état est perdu au scale-to-zero (sans gravité pour une protection).
+const RL_WINDOW: Duration = Duration::from_secs(60);
+const RL_MAX: usize = 120; // 120 req/min/IP : large pour un humain, borne un bot
+
+fn rl_map() -> &'static Mutex<HashMap<String, Vec<Instant>>> {
+    static M: OnceLock<Mutex<HashMap<String, Vec<Instant>>>> = OnceLock::new();
+    M.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+// IP réelle du client via X-Forwarded-For (Scaleway le pose devant le container).
+fn client_ip(req: &Request) -> String {
+    req.headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+async fn rate_limit(req: Request, next: Next) -> Result<Response, StatusCode> {
+    let ip = client_ip(&req);
+    let now = Instant::now();
+    {
+        let mut map = rl_map().lock().unwrap();
+        let hits = map.entry(ip).or_default();
+        hits.retain(|t| now.duration_since(*t) < RL_WINDOW);
+        if hits.len() >= RL_MAX {
+            return Err(StatusCode::TOO_MANY_REQUESTS);
+        }
+        hits.push(now);
+        // nettoyage opportuniste pour borner la mémoire
+        if map.len() > 5000 {
+            map.retain(|_, v| v.iter().any(|t| now.duration_since(*t) < RL_WINDOW));
+        }
+    }
+    Ok(next.run(req).await)
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -77,6 +122,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/skills/{id}",               patch(routes::admin::update_skill).delete(routes::admin::delete_skill))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
+        .layer(from_fn(rate_limit))
         .with_state(pool);
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
