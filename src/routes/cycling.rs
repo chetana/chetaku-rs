@@ -226,7 +226,7 @@ pub async fn stats(
 
     // 1 requête rapide — JSONB en cache si < 30s
     let cached: Option<Value> = sqlx::query_scalar(
-        "SELECT value FROM stats_cache WHERE key = $1 AND computed_at > NOW() - interval '30 seconds'"
+        "SELECT value FROM stats_cache WHERE key = $1 AND computed_at > NOW() - interval '24 hours'"
     )
     .bind(&cache_key)
     .fetch_optional(&pool)

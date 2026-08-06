@@ -3,6 +3,7 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use serde_json::Value;
 use sqlx::PgPool;
 
 use crate::{error::AppError, models::MediaEntry};
@@ -24,7 +25,24 @@ const SELECT: &str =
 pub async fn list(
     State(pool): State<PgPool>,
     Query(params): Query<MediaQuery>,
-) -> Result<Json<Vec<MediaEntry>>, AppError> {
+) -> Result<Json<Value>, AppError> {
+    // Liste complète sans filtre (le cas de la page publique) → cache 24h.
+    // La donnée ne bouge quasi jamais ; tout ajout/édition invalide le cache (stats::invalidate).
+    let no_filter =
+        params.media_type.is_none() && params.status.is_none() && params.q.is_none();
+
+    if no_filter {
+        let cached: Option<Value> = sqlx::query_scalar(
+            "SELECT value FROM stats_cache WHERE key = 'media_list' AND computed_at > NOW() - interval '24 hours'"
+        )
+        .fetch_optional(&pool)
+        .await
+        .map_err(AppError::Db)?;
+        if let Some(v) = cached {
+            return Ok(Json(v));
+        }
+    }
+
     let mut conditions: Vec<String> = vec![];
     let mut idx: u32 = 1;
 
@@ -62,7 +80,19 @@ pub async fn list(
     }
 
     let entries = query.fetch_all(&pool).await?;
-    Ok(Json(entries))
+    let value = serde_json::to_value(&entries)
+        .map_err(|e| AppError::ExternalApi(format!("media serialize: {e}")))?;
+
+    if no_filter {
+        let _ = sqlx::query(
+            "INSERT INTO stats_cache (key, value, computed_at) VALUES ('media_list', $1, NOW())
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, computed_at = NOW()"
+        )
+        .bind(&value)
+        .execute(&pool)
+        .await;
+    }
+    Ok(Json(value))
 }
 
 pub async fn get_one(

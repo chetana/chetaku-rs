@@ -248,7 +248,7 @@ pub async fn compute_and_store(pool: &PgPool) -> Result<Value, AppError> {
 
 /// À appeler après tout ajout / modification / suppression
 pub async fn invalidate(pool: &PgPool) {
-    if let Err(e) = sqlx::query("DELETE FROM stats_cache WHERE key = 'media_stats'")
+    if let Err(e) = sqlx::query("DELETE FROM stats_cache WHERE key IN ('media_stats', 'media_list')")
         .execute(pool)
         .await
     {
@@ -261,7 +261,7 @@ pub async fn invalidate(pool: &PgPool) {
 pub async fn handler(State(pool): State<PgPool>) -> Result<Json<Value>, AppError> {
     // 1 seule requête rapide — lit le JSONB stocké
     let cached: Option<Value> = sqlx::query_scalar(
-        "SELECT value FROM stats_cache WHERE key = 'media_stats' AND computed_at > NOW() - interval '30 seconds'"
+        "SELECT value FROM stats_cache WHERE key = 'media_stats' AND computed_at > NOW() - interval '24 hours'"
     )
     .fetch_optional(&pool)
     .await
