@@ -85,21 +85,9 @@ async fn main() -> anyhow::Result<()> {
     // Router
     let app = Router::new()
         .route("/health",                    get(routes::health::handler))
-        .route("/media",                     get(routes::media::list))
-        .route("/media/{media_type}/{id}",   get(routes::media::get_one))
-        .route("/stats",                     get(routes::stats::handler))
-        .route("/sync/anime",                post(routes::sync::sync_anime))
-        .route("/sync/game",                 post(routes::sync::sync_game))
-        .route("/sync/movie",                post(routes::sync::sync_movie))
-        .route("/sync/series",               post(routes::sync::sync_series))
-        .route("/media/{id}",                patch(routes::update::update_entry)
-                                             .delete(routes::update::delete_entry))
-        .route("/strava/activities",         get(routes::cycling::list))
-        .route("/strava/stats",              get(routes::cycling::stats))
-        .route("/strava/sync",               post(routes::cycling::sync))
-        .route("/voyage",                    get(routes::voyage::list).post(routes::voyage::create))
-        .route("/voyage/stats",              get(routes::voyage::stats))
-        .route("/voyage/{id}",               patch(routes::voyage::update).delete(routes::voyage::delete_voyage))
+        // ── medialist / strava / voyage RETIRÉS (2026-08-10) : expérimentations sans valeur CV
+        //    qui réveillaient la Serverless SQL (bots/crawls) → endpoints supprimés = 0 fuite.
+        //    Le code des handlers reste dans routes/ (dormant) au cas où on rebâtirait plus tard.
         // Portfolio / CV
         .route("/blog",                      get(routes::blog::list))
         .route("/blog/{slug}",               get(routes::blog::get_one))
