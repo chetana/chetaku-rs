@@ -2,6 +2,7 @@ mod db;
 mod error;
 mod models;
 mod routes;
+mod s3cache;
 mod sync;
 
 use axum::{Router, routing::{get, patch, post}};
@@ -66,9 +67,15 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Pool DB
+    // Pool DB (paresseux : ne se connecte pas au boot)
     let pool = db::create_pool().await?;
-    db::run_migrations(&pool).await?;
+    // Migrations : PAS à chaque démarrage (ça réveillerait la Serverless SQL à chaque cold-start).
+    // Le schéma prod est stable ; pour appliquer une nouvelle migration, déployer avec RUN_MIGRATIONS=1.
+    if std::env::var("RUN_MIGRATIONS").as_deref() == Ok("1") {
+        db::run_migrations(&pool).await?;
+    } else {
+        tracing::info!("migrations ignorées au boot (RUN_MIGRATIONS!=1) — base non réveillée");
+    }
 
     // CORS — autorise chetana.dev + chetlys + localhost dev
     let cors = CorsLayer::new()

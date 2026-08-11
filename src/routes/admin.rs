@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use sqlx::PgPool;
 
 use crate::error::AppError;
+use crate::s3cache;
 
 fn check_api_key(headers: &HeaderMap) -> Result<(), AppError> {
     let expected = std::env::var("API_KEY").unwrap_or_default();
@@ -75,6 +76,7 @@ pub async fn create_blog(
     .fetch_one(&pool)
     .await?;
 
+    s3cache::invalidate(&["blog", &format!("blogpost_{slug}")]).await;
     Ok(Json(json!({ "created": true, "id": id })))
 }
 
@@ -128,6 +130,7 @@ pub async fn update_blog(
 
     let r = q.execute(&pool).await?;
     if r.rows_affected() == 0 { return Err(AppError::NotFound); }
+    s3cache::invalidate(&["blog", &format!("blogpost_{slug}")]).await;
     Ok(Json(json!({ "updated": true })))
 }
 
@@ -140,6 +143,7 @@ pub async fn delete_blog(
     let r = sqlx::query("DELETE FROM blog_posts WHERE slug = $1")
         .bind(&slug).execute(&pool).await?;
     if r.rows_affected() == 0 { return Err(AppError::NotFound); }
+    s3cache::invalidate(&["blog", &format!("blogpost_{slug}")]).await;
     Ok(Json(json!({ "deleted": true })))
 }
 
@@ -189,6 +193,7 @@ pub async fn create_project(
     .bind(p.featured.unwrap_or(false))
     .fetch_one(&pool).await?;
 
+    s3cache::invalidate(&["projects", &format!("project_{slug}")]).await;
     Ok(Json(json!({ "created": true, "id": id })))
 }
 
@@ -233,6 +238,7 @@ pub async fn update_project(
 
     let r = q.execute(&pool).await?;
     if r.rows_affected() == 0 { return Err(AppError::NotFound); }
+    s3cache::invalidate(&["projects", &format!("project_{slug}")]).await;
     Ok(Json(json!({ "updated": true })))
 }
 
@@ -245,6 +251,7 @@ pub async fn delete_project(
     let r = sqlx::query("DELETE FROM projects WHERE slug = $1")
         .bind(&slug).execute(&pool).await?;
     if r.rows_affected() == 0 { return Err(AppError::NotFound); }
+    s3cache::invalidate(&["projects", &format!("project_{slug}")]).await;
     Ok(Json(json!({ "deleted": true })))
 }
 
@@ -291,6 +298,7 @@ pub async fn create_experience(
     .bind(p.sort_order.unwrap_or(0))
     .fetch_one(&pool).await?;
 
+    s3cache::invalidate(&["experiences"]).await;
     Ok(Json(json!({ "created": true, "id": id })))
 }
 
@@ -334,6 +342,7 @@ pub async fn update_experience(
 
     let r = q.execute(&pool).await?;
     if r.rows_affected() == 0 { return Err(AppError::NotFound); }
+    s3cache::invalidate(&["experiences"]).await;
     Ok(Json(json!({ "updated": true })))
 }
 
@@ -346,6 +355,7 @@ pub async fn delete_experience(
     let r = sqlx::query("DELETE FROM experiences WHERE id = $1")
         .bind(id).execute(&pool).await?;
     if r.rows_affected() == 0 { return Err(AppError::NotFound); }
+    s3cache::invalidate(&["experiences"]).await;
     Ok(Json(json!({ "deleted": true })))
 }
 
@@ -377,6 +387,7 @@ pub async fn create_skill(
     .bind(p.sort_order.unwrap_or(0))
     .fetch_one(&pool).await?;
 
+    s3cache::invalidate(&["skills"]).await;
     Ok(Json(json!({ "created": true, "id": id })))
 }
 
@@ -410,6 +421,7 @@ pub async fn update_skill(
 
     let r = q.execute(&pool).await?;
     if r.rows_affected() == 0 { return Err(AppError::NotFound); }
+    s3cache::invalidate(&["skills"]).await;
     Ok(Json(json!({ "updated": true })))
 }
 
@@ -422,5 +434,6 @@ pub async fn delete_skill(
     let r = sqlx::query("DELETE FROM skills WHERE id = $1")
         .bind(id).execute(&pool).await?;
     if r.rows_affected() == 0 { return Err(AppError::NotFound); }
+    s3cache::invalidate(&["skills"]).await;
     Ok(Json(json!({ "deleted": true })))
 }

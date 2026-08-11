@@ -7,6 +7,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 
 use crate::error::AppError;
+use crate::s3cache::{self, CACHE_TTL};
 
 // ── Projects ────────────────────────────────────────────────────────────────
 
@@ -30,7 +31,12 @@ pub struct Project {
     pub created_at: NaiveDateTime,
 }
 
-pub async fn list_projects(State(pool): State<PgPool>) -> Result<Json<Vec<Project>>, AppError> {
+pub async fn list_projects(
+    State(pool): State<PgPool>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if let Some(v) = s3cache::get_fresh("projects", CACHE_TTL).await {
+        return Ok(Json(v));
+    }
     let projects = sqlx::query_as::<_, Project>(
         "SELECT id, slug, title_fr, title_en, title_km,
                 description_fr, description_en, description_km,
@@ -39,13 +45,19 @@ pub async fn list_projects(State(pool): State<PgPool>) -> Result<Json<Vec<Projec
     )
     .fetch_all(&pool)
     .await?;
-    Ok(Json(projects))
+    let v = serde_json::to_value(&projects).unwrap_or_else(|_| serde_json::json!([]));
+    s3cache::put("projects", &v).await;
+    Ok(Json(v))
 }
 
 pub async fn get_project(
     State(pool): State<PgPool>,
     Path(slug): Path<String>,
-) -> Result<Json<Project>, AppError> {
+) -> Result<Json<serde_json::Value>, AppError> {
+    let ckey = format!("project_{slug}");
+    if let Some(v) = s3cache::get_fresh(&ckey, CACHE_TTL).await {
+        return Ok(Json(v));
+    }
     let project = sqlx::query_as::<_, Project>(
         "SELECT id, slug, title_fr, title_en, title_km,
                 description_fr, description_en, description_km,
@@ -56,7 +68,9 @@ pub async fn get_project(
     .fetch_optional(&pool)
     .await?
     .ok_or(AppError::NotFound)?;
-    Ok(Json(project))
+    let v = serde_json::to_value(&project).unwrap_or(serde_json::Value::Null);
+    s3cache::put(&ckey, &v).await;
+    Ok(Json(v))
 }
 
 // ── Experiences ──────────────────────────────────────────────────────────────
@@ -79,7 +93,10 @@ pub struct Experience {
 
 pub async fn list_experiences(
     State(pool): State<PgPool>,
-) -> Result<Json<Vec<Experience>>, AppError> {
+) -> Result<Json<serde_json::Value>, AppError> {
+    if let Some(v) = s3cache::get_fresh("experiences", CACHE_TTL).await {
+        return Ok(Json(v));
+    }
     let experiences = sqlx::query_as::<_, Experience>(
         "SELECT id, company, role_fr, role_en, role_km,
                 date_start, date_end, location,
@@ -88,7 +105,9 @@ pub async fn list_experiences(
     )
     .fetch_all(&pool)
     .await?;
-    Ok(Json(experiences))
+    let v = serde_json::to_value(&experiences).unwrap_or_else(|_| serde_json::json!([]));
+    s3cache::put("experiences", &v).await;
+    Ok(Json(v))
 }
 
 // ── Skills ───────────────────────────────────────────────────────────────────
@@ -102,12 +121,19 @@ pub struct Skill {
     pub sort_order: Option<i32>,
 }
 
-pub async fn list_skills(State(pool): State<PgPool>) -> Result<Json<Vec<Skill>>, AppError> {
+pub async fn list_skills(
+    State(pool): State<PgPool>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if let Some(v) = s3cache::get_fresh("skills", CACHE_TTL).await {
+        return Ok(Json(v));
+    }
     let skills = sqlx::query_as::<_, Skill>(
         "SELECT id, category, name, color, sort_order
          FROM skills ORDER BY category, sort_order ASC",
     )
     .fetch_all(&pool)
     .await?;
-    Ok(Json(skills))
+    let v = serde_json::to_value(&skills).unwrap_or_else(|_| serde_json::json!([]));
+    s3cache::put("skills", &v).await;
+    Ok(Json(v))
 }
