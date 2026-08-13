@@ -18,7 +18,9 @@ use s3::{Bucket, Region};
 
 /// Durée de vie du cache. Les écritures admin invalident déjà les clés concernées ; ce TTL
 /// n'est qu'un filet de sécurité contre une modification faite hors des endpoints admin.
-pub const CACHE_TTL: Duration = Duration::from_secs(6 * 3600); // 6 h
+/// 24 h : chaque endpoint ne réveille la base qu'au plus 1×/jour pour se rafraîchir (au lieu
+/// de 4×/jour à 6h) → moins de mini-réveils facturés. La fraîcheur reste immédiate via l'invalidation.
+pub const CACHE_TTL: Duration = Duration::from_secs(24 * 3600); // 24 h
 
 /// Bucket S3 initialisé paresseusement depuis l'env. `None` = cache désactivé (fallback base).
 fn bucket() -> Option<&'static Bucket> {
