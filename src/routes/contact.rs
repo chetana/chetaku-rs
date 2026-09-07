@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
 use crate::error::AppError;
+use crate::s3cache::{self, CACHE_TTL};
 
 // ── Comments ─────────────────────────────────────────────────────────────────
 
@@ -30,7 +31,11 @@ pub struct CreateComment {
 pub async fn list_comments(
     State(pool): State<PgPool>,
     Path(post_id): Path<i32>,
-) -> Result<Json<Vec<Comment>>, AppError> {
+) -> Result<Json<serde_json::Value>, AppError> {
+    let ckey = format!("comments_{post_id}");
+    if let Some(v) = s3cache::get_fresh(&ckey, CACHE_TTL).await {
+        return Ok(Json(v));
+    }
     let comments = sqlx::query_as::<_, Comment>(
         "SELECT id, post_id, author_name, content, created_at
          FROM comments WHERE post_id = $1 AND approved = true ORDER BY created_at DESC",
@@ -38,7 +43,9 @@ pub async fn list_comments(
     .bind(post_id)
     .fetch_all(&pool)
     .await?;
-    Ok(Json(comments))
+    let v = serde_json::to_value(&comments).unwrap_or_else(|_| serde_json::json!([]));
+    s3cache::put(&ckey, &v).await;
+    Ok(Json(v))
 }
 
 pub async fn create_comment(
@@ -68,6 +75,7 @@ pub async fn create_comment(
     .execute(&pool)
     .await?;
 
+    s3cache::invalidate(&[&format!("comments_{}", payload.post_id)]).await;
     Ok(Json(serde_json::json!({ "created": true })))
 }
 
