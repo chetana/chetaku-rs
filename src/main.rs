@@ -5,7 +5,7 @@ mod routes;
 mod s3cache;
 mod sync;
 
-use axum::{Router, routing::{get, patch, post}};
+use axum::{Router, extract::DefaultBodyLimit, routing::{get, patch, post}};
 use axum::{extract::Request, http::StatusCode, middleware::{from_fn, Next}, response::Response};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -82,6 +82,7 @@ async fn main() -> anyhow::Result<()> {
         .allow_origin([
             "https://chetana.fr".parse().unwrap(),
             "https://chetana.dev".parse().unwrap(),
+            "https://happy-lys-2026.chetana.fr".parse().unwrap(),
             "https://chetlys.vercel.app".parse().unwrap(),
             "http://localhost:3000".parse().unwrap(),
             "http://localhost:5173".parse().unwrap(),
@@ -102,6 +103,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/projects/{slug}",           get(routes::portfolio::get_project))
         .route("/experiences",               get(routes::portfolio::list_experiences))
         .route("/skills",                    get(routes::portfolio::list_skills))
+        // happy-lys-2026 : état des bons à valoir (objet S3 fixe, secret dans l'URL, schéma strict)
+        .route("/happy-lys/{token}/state",   get(routes::happy_lys::get_state)
+                                              .put(routes::happy_lys::put_state).layer(DefaultBodyLimit::max(4096)))
         // Contact
         .route("/comments/{post_id}",        get(routes::contact::list_comments))
         .route("/comments",                  post(routes::contact::create_comment))

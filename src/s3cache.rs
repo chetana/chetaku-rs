@@ -23,7 +23,7 @@ use s3::{Bucket, Region};
 pub const CACHE_TTL: Duration = Duration::from_secs(24 * 3600); // 24 h
 
 /// Bucket S3 initialisé paresseusement depuis l'env. `None` = cache désactivé (fallback base).
-fn bucket() -> Option<&'static Bucket> {
+pub(crate) fn bucket() -> Option<&'static Bucket> {
     static B: OnceLock<Option<Box<Bucket>>> = OnceLock::new();
     B.get_or_init(|| {
         let access = std::env::var("S3_ACCESS_KEY").ok()?;
@@ -104,4 +104,28 @@ pub async fn invalidate(keys: &[&str]) {
             tracing::warn!("s3cache: invalidate '{k}' échoué: {e}");
         }
     }
+}
+
+/// Lecture brute d'un objet hors cache TTL (état applicatif). `Ok(None)` = objet absent,
+/// `Err` = S3 indisponible ou mal configuré (l'appelant décide quoi répondre).
+pub async fn get_raw(path: &str) -> Result<Option<Vec<u8>>, String> {
+    let b = bucket().ok_or_else(|| "s3 non configuré".to_string())?;
+    match b.get_object(path).await {
+        Ok(r) if r.status_code() == 200 => Ok(Some(r.bytes().to_vec())),
+        Ok(r) if r.status_code() == 404 => Ok(None),
+        Ok(r) => Err(format!("s3 status {}", r.status_code())),
+        Err(e) => {
+            let m = e.to_string();
+            if m.contains("404") || m.contains("NoSuchKey") { Ok(None) } else { Err(m) }
+        }
+    }
+}
+
+/// Écriture brute d'un objet JSON hors cache TTL.
+pub async fn put_raw(path: &str, body: &[u8]) -> Result<(), String> {
+    let b = bucket().ok_or_else(|| "s3 non configuré".to_string())?;
+    b.put_object_with_content_type(path, body, "application/json")
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }

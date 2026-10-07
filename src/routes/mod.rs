@@ -9,3 +9,4 @@ pub mod stats;
 pub mod sync;
 pub mod update;
 pub mod voyage;
+pub mod happy_lys;
