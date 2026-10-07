@@ -30,3 +30,14 @@ Variables requises :
 
 - Messages concis, en français ou anglais
 - Pas de `Co-Authored-By`
+
+## Déploiement actuel (depuis 09/2026) : chetbox, PAS Cloud Run / Scaleway Serverless
+`deploy.sh` et la section ci-dessus sont **obsolètes**. Aujourd'hui : `docker build -t rg.fr-par.scw.cloud/chetana-apps/chetaku-rs:<N> .` (N = `git rev-list --count HEAD`),
+`docker push`, puis sur la box (`ssh -i ~/.ssh/chetbox root@163.172.7.239`, `/opt/chet`) : éditer le tag dans `compose.yml`,
+`docker compose up -d --force-recreate chetaku-rs < /dev/null` (le `--force-recreate` relit `env/chetaku-rs.env`). Rollback = remettre le tag précédent.
+Piège : dans un `ssh … 'bash -s' <<EOF`, `docker compose up` avale le reste du script via stdin → toujours `< /dev/null`.
+
+## Route happy-lys (site cadeau d'anniversaire de Lys, 10/2026)
+`GET|PUT /happy-lys/{token}/state` (`src/routes/happy_lys.rs`) : état des « bons à valoir » + souhait libre, dans UN objet S3 fixe
+`happy-lys/state.json`. Secret = `HAPPY_LYS_TOKEN` (env box, sinon 404). Schéma strict (`b0..b99` bool, `txt` ≤ 300 car., `t` ms), corps ≤ 2 Ko,
+un `t` plus ancien n'écrase jamais un plus récent. Appelée via Caddy (`happy-lys-2026.chetana.fr/api/*` → `chetaku-rs:8080/*`). Aucune base touchée.
