@@ -2,21 +2,19 @@
 
 ## Deploy
 
-**Toujours utiliser `deploy.sh`**, jamais `gcloud run deploy` directement :
+Hébergé sur **chetbox** (docker compose + Caddy, Cloudflare devant) depuis 09/2026 — plus Cloud Run ni Scaleway Serverless.
 
-```bash
-bash deploy.sh
-```
+**Toujours `bash deploy.sh`** (arbre git propre ; tag image = nb de commits) : build → push registre Scaleway → bump du tag dans
+`/opt/chet/compose.yml` sur la box → `up -d --force-recreate` → vérifie `/health` et le tag réellement en cours d'exécution.
+Rollback : `ROLLBACK=<tag> bash deploy.sh` (le script affiche le tag précédent).
 
-Ce script passe `--set-env-vars` **dans le même appel** `gcloud run deploy --source .` → une seule révision créée, env vars garanties.
-
-⚠️ **Ne JAMAIS faire séparément :**
-- `gcloud run deploy --source .` seul → efface toutes les env vars
-- `gcloud run services update --update-env-vars ...` via PowerShell → crée des doubles révisions (PowerShell exécute gcloud.cmd deux fois), ce qui peut écraser les vars avec des valeurs partielles
+Piège (07/10/2026) : ne jamais enchaîner `docker compose up` dans un script passé à `ssh … 'bash -s' <<EOF` — il avale le reste du
+script via stdin et rien ne se déploie, sans erreur. `deploy.sh` utilise `ssh -n` et `< /dev/null`.
 
 ## Env vars
 
-Toutes les vars sont dans `.env` (gitignorée). Tenir ce fichier à jour à chaque ajout de variable Cloud Run.
+En prod : `/opt/chet/env/chetaku-rs.env` sur la box (jamais dans le dépôt) ; après édition, `docker compose up -d --force-recreate chetaku-rs`.
+En local : `.env` (gitignorée).
 
 Variables requises :
 - `DATABASE_URL` — Neon PostgreSQL
@@ -30,12 +28,6 @@ Variables requises :
 
 - Messages concis, en français ou anglais
 - Pas de `Co-Authored-By`
-
-## Déploiement actuel (depuis 09/2026) : chetbox, PAS Cloud Run / Scaleway Serverless
-`deploy.sh` et la section ci-dessus sont **obsolètes**. Aujourd'hui : `docker build -t rg.fr-par.scw.cloud/chetana-apps/chetaku-rs:<N> .` (N = `git rev-list --count HEAD`),
-`docker push`, puis sur la box (`ssh -i ~/.ssh/chetbox root@163.172.7.239`, `/opt/chet`) : éditer le tag dans `compose.yml`,
-`docker compose up -d --force-recreate chetaku-rs < /dev/null` (le `--force-recreate` relit `env/chetaku-rs.env`). Rollback = remettre le tag précédent.
-Piège : dans un `ssh … 'bash -s' <<EOF`, `docker compose up` avale le reste du script via stdin → toujours `< /dev/null`.
 
 ## Route happy-lys (site cadeau d'anniversaire de Lys, 10/2026)
 `GET|PUT /happy-lys/{token}/state` (`src/routes/happy_lys.rs`) : état des « bons à valoir » + souhait libre, dans UN objet S3 fixe

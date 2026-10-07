@@ -264,13 +264,15 @@ cargo run
 cargo build --release
 ```
 
-## Déploiement (Cloud Run)
+## Déploiement (chetbox)
 
 ```bash
-bash deploy.sh
+bash deploy.sh                 # build + push + bump du tag sur la box + recreate + vérif /health
+ROLLBACK=<tag> bash deploy.sh  # revenir à un tag précédent
 ```
 
-Le script `deploy.sh` lit le fichier `.env` et passe toutes les variables via `--set-env-vars` dans un seul appel `gcloud run deploy --source .` → une seule révision, env vars garanties.
+Le script build l'image (`rg.fr-par.scw.cloud/chetana-apps/chetaku-rs:<nb de commits>`), la pousse, remplace le tag dans `/opt/chet/compose.yml` sur la box (`ssh -i ~/.ssh/chetbox`) puis recrée le service. Les secrets restent dans `/opt/chet/env/chetaku-rs.env` sur la box.
+
 
 ## Structure du projet
 
