@@ -8,7 +8,7 @@ mod sync;
 
 use axum::{Router, extract::DefaultBodyLimit, routing::{get, patch, post}};
 use axum::{extract::Request, http::StatusCode, middleware::{from_fn, Next}, response::Response};
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowHeaders, Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use std::collections::HashMap;
@@ -90,7 +90,7 @@ async fn main() -> anyhow::Result<()> {
             "http://localhost:5173".parse().unwrap(),
         ])
         .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_headers(AllowHeaders::mirror_request());
 
     // Router
     let app = Router::new()
