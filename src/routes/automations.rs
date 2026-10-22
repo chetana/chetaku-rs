@@ -27,6 +27,7 @@ pub const SCHEDULES: &[(&str, Sched)] = &[
     ("logto-reconcile", Sched { weekdays_only: true, hours: &[9], minutes: &[10], grace_min: 60 }),
     ("gemini-notes-sync", Sched { weekdays_only: true, hours: &[9], minutes: &[15], grace_min: 60 }),
     ("recap-veille", Sched { weekdays_only: true, hours: &[10], minutes: &[30], grace_min: 60 }),
+    ("digest-jour", Sched { weekdays_only: true, hours: &[17], minutes: &[45], grace_min: 60 }),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -107,13 +108,20 @@ mod tests {
     fn sched(name: &str) -> &'static Sched { &SCHEDULES.iter().find(|(n, _)| *n == name).unwrap().1 }
 
     #[test]
-    fn les_8_timers_sont_declares() {
+    fn les_9_timers_sont_declares() {
         let mut names: Vec<_> = SCHEDULES.iter().map(|(n, _)| *n).collect();
         names.sort();
         assert_eq!(names, [
-            "gemini-notes-sync", "logto-reconcile", "mr-feedback-watch", "mr-review-watch",
+            "digest-jour", "gemini-notes-sync", "logto-reconcile", "mr-feedback-watch", "mr-review-watch",
             "pod-restart-watch", "recap-veille", "sentry-watch", "sync-mr-tickets",
         ]);
+    }
+
+    #[test]
+    fn digest_jour_en_semaine_a_17h45_paris() {
+        // vendredi 23/10 18:00 Paris (16:00Z) → échéance 17:45 Paris = 15:45Z ; samedi : toujours vendredi
+        assert_eq!(last_due(utc("2026-10-23T16:00:00Z"), sched("digest-jour")), Some(utc("2026-10-23T15:45:00Z")));
+        assert_eq!(last_due(utc("2026-10-24T12:00:00Z"), sched("digest-jour")), Some(utc("2026-10-23T15:45:00Z")));
     }
 
     #[test]

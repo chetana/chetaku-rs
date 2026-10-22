@@ -12,3 +12,4 @@ pub mod voyage;
 pub mod happy_lys;
 pub mod runs;
 pub mod automations;
+pub mod digest;

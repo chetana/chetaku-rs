@@ -218,7 +218,7 @@ pub fn clamp_limit(l: Option<i64>) -> i64 {
     l.unwrap_or(100).clamp(1, 500)
 }
 
-pub fn check_range(from: Option<DateTime<Utc>>, to: Option<DateTime<Utc>>) -> Result<(), String> {
+pub(crate) fn check_range(from: Option<DateTime<Utc>>, to: Option<DateTime<Utc>>) -> Result<(), String> {
     match (from, to) {
         (Some(f), Some(t)) if f >= t => Err("from doit précéder to".into()),
         _ => Ok(()),

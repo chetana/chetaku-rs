@@ -112,6 +112,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/runs",                      post(routes::runs::create).layer(DefaultBodyLimit::max(routes::runs::MAX_BODY))
                                               .get(routes::runs::list))
         .route("/automations/status",        get(routes::automations::status))
+        .route("/digest",                    get(routes::digest::digest))
         .route("/runs/summary",              get(routes::runs::summary))
         .route("/runs/{id}",                 get(routes::runs::get_one))
         .route("/runs/{id}/report",          get(routes::runs::report))
