@@ -129,3 +129,12 @@ pub async fn put_raw(path: &str, body: &[u8]) -> Result<(), String> {
         .map(|_| ())
         .map_err(|e| e.to_string())
 }
+
+/// Écriture brute d'un objet avec son type de contenu (rapports markdown des automatisations).
+pub async fn put_bytes(path: &str, body: &[u8], content_type: &str) -> Result<(), String> {
+    let b = bucket().ok_or_else(|| "s3 non configuré".to_string())?;
+    b.put_object_with_content_type(path, body, content_type)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}

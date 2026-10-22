@@ -1,3 +1,4 @@
+mod auth;
 mod db;
 mod error;
 mod models;
@@ -83,6 +84,7 @@ async fn main() -> anyhow::Result<()> {
             "https://chetana.fr".parse().unwrap(),
             "https://chetana.dev".parse().unwrap(),
             "https://happy-lys-2026.chetana.fr".parse().unwrap(),
+            "https://job-dashboard.chetana.fr".parse().unwrap(),
             "https://chetlys.vercel.app".parse().unwrap(),
             "http://localhost:3000".parse().unwrap(),
             "http://localhost:5173".parse().unwrap(),
@@ -106,6 +108,13 @@ async fn main() -> anyhow::Result<()> {
         // happy-lys-2026 : état des bons à valoir (objet S3 fixe, secret dans l'URL, schéma strict)
         .route("/happy-lys/{token}/state",   get(routes::happy_lys::get_state)
                                               .put(routes::happy_lys::put_state).layer(DefaultBodyLimit::max(4096)))
+        // Automatisations : rapports des timers (token machine RUNS_WRITE_TOKEN)
+        .route("/runs",                      post(routes::runs::create).layer(DefaultBodyLimit::max(routes::runs::MAX_BODY))
+                                              .get(routes::runs::list))
+        .route("/automations/status",        get(routes::automations::status))
+        .route("/runs/summary",              get(routes::runs::summary))
+        .route("/runs/{id}",                 get(routes::runs::get_one))
+        .route("/runs/{id}/report",          get(routes::runs::report))
         // Contact
         .route("/comments/{post_id}",        get(routes::contact::list_comments))
         .route("/comments",                  post(routes::contact::create_comment))

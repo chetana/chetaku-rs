@@ -10,3 +10,5 @@ pub mod sync;
 pub mod update;
 pub mod voyage;
 pub mod happy_lys;
+pub mod runs;
+pub mod automations;
