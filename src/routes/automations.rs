@@ -28,6 +28,7 @@ pub const SCHEDULES: &[(&str, Sched)] = &[
     ("gemini-notes-sync", Sched { weekdays_only: true, hours: &[9], minutes: &[15], grace_min: 60 }),
     ("recap-veille", Sched { weekdays_only: true, hours: &[10], minutes: &[30], grace_min: 60 }),
     ("digest-jour", Sched { weekdays_only: true, hours: &[17], minutes: &[45], grace_min: 60 }),
+    ("mes-tickets", Sched { weekdays_only: true, hours: &[9, 13], minutes: &[30], grace_min: 60 }),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -108,13 +109,22 @@ mod tests {
     fn sched(name: &str) -> &'static Sched { &SCHEDULES.iter().find(|(n, _)| *n == name).unwrap().1 }
 
     #[test]
-    fn les_9_timers_sont_declares() {
+    fn les_10_timers_sont_declares() {
         let mut names: Vec<_> = SCHEDULES.iter().map(|(n, _)| *n).collect();
         names.sort();
         assert_eq!(names, [
-            "digest-jour", "gemini-notes-sync", "logto-reconcile", "mr-feedback-watch", "mr-review-watch",
-            "pod-restart-watch", "recap-veille", "sentry-watch", "sync-mr-tickets",
+            "digest-jour", "gemini-notes-sync", "logto-reconcile", "mes-tickets", "mr-feedback-watch",
+            "mr-review-watch", "pod-restart-watch", "recap-veille", "sentry-watch", "sync-mr-tickets",
         ]);
+    }
+
+    #[test]
+    fn mes_tickets_en_semaine_a_9h30_et_13h30_paris() {
+        // jeudi 22/10 12:00Z = 14:00 Paris → 13:30 Paris = 11:30Z ; 09:00Z = 11:00 Paris → 09:30 Paris = 07:30Z
+        assert_eq!(last_due(utc("2026-10-22T12:00:00Z"), sched("mes-tickets")), Some(utc("2026-10-22T11:30:00Z")));
+        assert_eq!(last_due(utc("2026-10-22T09:00:00Z"), sched("mes-tickets")), Some(utc("2026-10-22T07:30:00Z")));
+        // samedi 24/10 : dernier passage = vendredi 23/10 13:30 Paris = 11:30Z
+        assert_eq!(last_due(utc("2026-10-24T12:00:00Z"), sched("mes-tickets")), Some(utc("2026-10-23T11:30:00Z")));
     }
 
     #[test]
