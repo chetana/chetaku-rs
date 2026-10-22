@@ -197,14 +197,14 @@ mod tests {
         h.kid = kid.map(String::from);
         encode(&h, &claims, &EncodingKey::from_secret(secret)).unwrap()
     }
-    fn good() -> Value { json!({"iss": ISS, "aud": AUD, "sub": "u123", "exp": exp(600), "email": "chetana.yin@gmail.com"}) }
+    fn good() -> Value { json!({"iss": ISS, "aud": AUD, "sub": "u123", "exp": exp(600), "email": "user@example.com"}) }
     fn check(t: &str) -> Result<Claims, String> { verify_with_keys(t, &keys(), ISS, AUD) }
 
     #[test]
     fn accepte_un_token_valide() {
         let c = check(&token_with(good(), Some("k1"), SECRET)).unwrap();
         assert_eq!(c.sub, "u123");
-        assert_eq!(c.email.as_deref(), Some("chetana.yin@gmail.com"));
+        assert_eq!(c.email.as_deref(), Some("user@example.com"));
     }
 
     #[test]
@@ -241,9 +241,9 @@ mod tests {
     #[test]
     fn liste_blanche_par_sub_ou_email() {
         let c = |sub: &str, email: Option<&str>| Claims { sub: sub.into(), email: email.map(String::from) };
-        let a = Allowed::new("u123, u456", "Chetana.Yin@gmail.com");
+        let a = Allowed::new("u123, u456", "User@Example.com");
         assert!(a.permits(&c("u123", None)));
-        assert!(a.permits(&c("zzz", Some("chetana.yin@gmail.com"))));
+        assert!(a.permits(&c("zzz", Some("user@example.com"))));
         assert!(!a.permits(&c("zzz", Some("intrus@gmail.com"))));
         assert!(!a.permits(&c("zzz", None)));
     }

@@ -727,3 +727,43 @@ Consommés exclusivement par `admin.chetana.dev` via le proxy `chetana-admin` (q
 | DELETE | `/skills/{id}` | Supprime le skill |
 
 Toutes les réponses write : `{ "created": true, "id": N }` ou `{ "updated": true }` ou `{ "deleted": true }`
+
+## Suivi des automatisations (`/runs`, `/automations/status`, `/digest`)
+
+Rapports envoyés par des automatisations locales et lus par un tableau de bord. Données minimales (compteurs, statuts, liens), jamais de contenu client.
+
+**Authentification** : `x-runs-token: <RUNS_WRITE_TOKEN>` (écriture et lecture « machine ») ou `Authorization: Bearer <JWT Logto>` pour la lecture (JWKS `{LOGTO_ENDPOINT}/oidc/jwks`, issuer `{LOGTO_ENDPOINT}/oidc`, audience `LOGTO_AUDIENCE`, puis liste blanche `DASHBOARD_ALLOWED_SUBS` / `DASHBOARD_ALLOWED_EMAILS`). Sans token valide : `404` (route masquée) ; bearer invalide ou non autorisé : `401`. Token absent ou < 16 caractères côté serveur : tout est refusé.
+
+### POST /runs
+Corps JSON (≤ 512 Ko, champs inconnus refusés) :
+
+| Champ | Type | Règle |
+|---|---|---|
+| `run_id` | string | unique, `[A-Za-z0-9._:-]`, ≤ 128 ; idempotent (un doublon répond `200`, rien n'est modifié) |
+| `automation` | string | `[a-z0-9-]`, ≤ 64 |
+| `started_at`, `ended_at` | RFC 3339 | `ended_at` ≥ `started_at` |
+| `status` | string | `ok`, `noop`, `alert`, `error` |
+| `headline` | string | une ligne, ≤ 300 |
+| `metrics` | objet | ≤ 64 Ko |
+| `items` | tableau | `[{kind, ref, url, title, action, from, to}]`, ≤ 64 Ko |
+| `impact` | objet | `{summary, areas[]}` |
+| `report_md` | string | ≤ 256 Ko, écrit sur S3 (`reports/<automation>/<AAAA-MM-JJ>/<run_id>.md`) **avant** la ligne Postgres ; S3 indisponible → `502` |
+
+Réponses : `201 {id, run_id, created: true}`, `200 {run_id, created: false}`, `400` validation, `413` corps trop gros.
+
+### GET /runs
+Filtres : `from`, `to` (RFC 3339, UTC), `automation`, `status`, `limit` (1–500, défaut 100). Renvoie `{runs: [...]}` (sans `items`).
+
+### GET /runs/summary?group=hour|day|month
+Compteurs par tranche (`total, ok, noop, alert, error`), tranches en **heure de Paris** (`bucket` = `AAAA-MM-JJTHH:MM:SS`), mêmes filtres.
+
+### GET /runs/{id} · GET /runs/{id}/report
+Détail complet (avec `items`, `impact`) · rapport markdown lu sur S3 (`404` s'il n'y en a pas, `502` si S3 est indisponible).
+
+### GET /automations/status
+Dernier passage de chaque automatisation et état : `a_jour`, `en_cours` (échéance passée dans le délai de grâce), `en_retard`, `non_planifie`. Les calendriers sont recopiés dans `SCHEDULES` (`src/routes/automations.rs`), heure de Paris.
+
+### GET /digest?from=&to=&automation=
+Synthèse déterministe (gabarits, sans LLM) : `text`, `runs`, `active`, `by_status`, `changes`, `areas`, `impacts`. `from` par défaut = minuit à Paris, `to` = maintenant ; passer `from` = dernière consultation donne « ce qui a bougé ».
+
+Migration : `migrations/005_automation_runs.sql` (rejouable ; le serveur ne migre pas au démarrage sans `RUN_MIGRATIONS=1`).

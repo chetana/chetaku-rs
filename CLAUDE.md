@@ -23,6 +23,7 @@ Variables requises :
 - `TMDB_API_KEY` — films/séries (themoviedb.org)
 - `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` / `STRAVA_REFRESH_TOKEN` — activités sportives
 - `PORT` — 8080 (local uniquement)
+- Suivi des automatisations (voir `docs/API.md`) : `RUNS_WRITE_TOKEN` (écriture/lecture machine, ≥ 16 car.), `LOGTO_ENDPOINT` + `LOGTO_AUDIENCE` (vérification des JWT), `DASHBOARD_ALLOWED_SUBS` / `DASHBOARD_ALLOWED_EMAILS` (liste blanche ; vide = personne). Sans `LOGTO_*`, seul le token machine fonctionne. Migration 005 jouée par `psql` (pas par `RUN_MIGRATIONS`).
 
 ## Commits
 
