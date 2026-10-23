@@ -14,3 +14,4 @@ pub mod runs;
 pub mod automations;
 pub mod digest;
 pub mod live_sessions;
+pub mod impacts;

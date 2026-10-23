@@ -111,6 +111,7 @@ async fn main() -> anyhow::Result<()> {
         // Automatisations : rapports des timers (token machine RUNS_WRITE_TOKEN)
         .route("/runs",                      post(routes::runs::create).layer(DefaultBodyLimit::max(routes::runs::MAX_BODY))
                                               .get(routes::runs::list))
+        .route("/impacts",                   get(routes::impacts::list))
         .route("/live-sessions",             get(routes::live_sessions::list))
         .route("/live-sessions/{machine}",   put(routes::live_sessions::put).layer(DefaultBodyLimit::max(routes::live_sessions::MAX_BODY)))
         .route("/automations/status",        get(routes::automations::status))

@@ -766,6 +766,11 @@ Dernier passage de chaque automatisation et état : `a_jour`, `en_cours` (éché
 ### GET /digest?from=&to=&automation=
 Synthèse déterministe (gabarits, sans LLM) : `text`, `runs`, `active`, `by_status`, `changes`, `areas`, `impacts`. `from` par défaut = minuit à Paris, `to` = maintenant ; passer `from` = dernière consultation donne « ce qui a bougé ».
 
+### GET /impacts
+Historique des **changements** portés par les automatisations, regroupés en heure de Paris. Filtres : `group` (`day` par défaut, `week` = lundi, `month`), `from`/`to` (RFC 3339, défaut : 30 jours), `scope` (`changes` par défaut ; `all` ajoute les vérifications `recheck`, `attend`, `reserve`, `a_avancer`, `resume`), `area` (ex. `MR !1200`, `DAI-1042` : chronologie d'un seul élément). Toute action inconnue compte comme un changement.
+
+Réponse : `{group, tz, scope, area, total, areas: [{area, count}] (15 premières), buckets: [{bucket, changes, runs, events}]}` (tranches de la plus récente à la plus ancienne). Chaque événement : `{at, run_id, automation, kind, ref, area, action, title, url, from, to, summary, times}`. Une même action sur un même élément n'est comptée qu'une fois par tranche (`times` = nombre de passages qui l'ont répétée, `at` = le premier). Lecture : token machine ou JWT Logto, comme `/runs`.
+
 ### PUT /live-sessions/{machine} · GET /live-sessions
 Sessions Claude Code **actives**, une ligne par machine, remplacée à chaque envoi (aucun historique). Même authentification que `/runs` : `PUT` avec `x-runs-token` seul (sinon `404`), `GET` avec le token machine ou un JWT Logto en liste blanche.
 
