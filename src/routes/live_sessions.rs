@@ -14,7 +14,7 @@ use sqlx::PgPool;
 use crate::error::AppError;
 use crate::routes::runs::{guard, token_ok, valid_ident};
 
-pub const MAX_BODY: usize = 128 * 1024;
+pub const MAX_BODY: usize = 256 * 1024;
 const MAX_SESSIONS: usize = 200;
 pub const STALE_AFTER_SECS: i64 = 150;
 
@@ -31,6 +31,25 @@ struct RawSession {
     pid: Option<i64>,
     #[serde(default)]
     started_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    last_prompt: String,
+    #[serde(default)]
+    doing: String,
+    #[serde(default)]
+    todos: Vec<RawTodo>,
+    #[serde(default)]
+    link: Option<String>,
+    #[serde(default)]
+    last_activity_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawTodo {
+    content: String,
+    #[serde(default)]
+    status: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,6 +66,27 @@ pub struct LivePayload {
 
 fn clip(s: &str, max: usize) -> String {
     s.chars().filter(|c| !c.is_control()).take(max).collect()
+}
+
+const MAX_TODOS: usize = 30;
+const LINK_PREFIX: &str = "https://claude.ai/code/";
+
+// Seul un lien vers une session claude.ai/code est conservé ; tout le reste est écarté, jamais une URL arbitraire.
+fn safe_link(l: Option<&str>) -> Option<String> {
+    let id = l?.strip_prefix(LINK_PREFIX)?;
+    (id.starts_with("session_") && valid_ident(id, "_", 80)).then(|| format!("{LINK_PREFIX}{id}"))
+}
+
+fn clean_todos(todos: Vec<RawTodo>) -> Vec<Value> {
+    todos
+        .into_iter()
+        .take(MAX_TODOS)
+        .filter_map(|t| {
+            let content = clip(&t.content, 200);
+            let status = if valid_ident(&t.status, "-_", 24) { t.status } else { "pending".to_string() };
+            (!content.is_empty()).then(|| json!({ "content": content, "status": status }))
+        })
+        .collect()
 }
 
 pub fn validate(body: &[u8]) -> Result<LivePayload, String> {
@@ -70,6 +110,12 @@ pub fn validate(body: &[u8]) -> Result<LivePayload, String> {
             "cwd": clip(&s.cwd, 300),
             "pid": s.pid,
             "started_at": s.started_at,
+            "title": clip(&s.title, 160),
+            "last_prompt": clip(&s.last_prompt, 300),
+            "doing": clip(&s.doing, 400),
+            "todos": clean_todos(s.todos),
+            "link": safe_link(s.link.as_deref()),
+            "last_activity_at": s.last_activity_at,
         }));
     }
     Ok(LivePayload { reported_at: raw.reported_at, sessions: Value::Array(out) })
@@ -194,6 +240,49 @@ mod tests {
     fn refuse_json_invalide_ou_sans_date() {
         assert!(validate(b"pas du json").is_err());
         assert!(validate(br#"{"sessions": []}"#).is_err());
+    }
+
+    #[test]
+    fn conserve_titre_activite_taches_et_lien() {
+        let mut s = sess("abc");
+        s["title"] = json!("Daily note");
+        s["last_prompt"] = json!("fais le point");
+        s["doing"] = json!("Je lance les tests");
+        s["todos"] = json!([{ "content": "a faire", "status": "in_progress" }, { "content": "", "status": "pending" }]);
+        s["link"] = json!("https://claude.ai/code/session_01TgChoXa7Fogd9CC85avdUu");
+        s["last_activity_at"] = json!("2026-10-23T17:05:00Z");
+        let v = validate(&body(json!([s]))).unwrap().sessions[0].clone();
+        assert_eq!(v["title"], "Daily note");
+        assert_eq!(v["doing"], "Je lance les tests");
+        assert_eq!(v["todos"].as_array().unwrap().len(), 1);
+        assert_eq!(v["link"], "https://claude.ai/code/session_01TgChoXa7Fogd9CC85avdUu");
+    }
+
+    #[test]
+    fn ecarte_les_liens_non_claude_et_les_statuts_de_tache_invalides() {
+        for bad in ["https://evil.example/x", "http://claude.ai/code/session_abc", "https://claude.ai/code/../x", "javascript:alert(1)", "https://claude.ai/code/autre_chose"] {
+            assert_eq!(safe_link(Some(bad)), None, "{bad}");
+        }
+        let t = clean_todos(vec![RawTodo { content: "x".into(), status: "a b; DROP".into() }]);
+        assert_eq!(t[0]["status"], "pending");
+    }
+
+    #[test]
+    fn plafonne_les_taches_et_tronque_les_textes() {
+        let mut s = sess("abc");
+        s["todos"] = Value::Array((0..50).map(|i| json!({ "content": format!("t{i}"), "status": "pending" })).collect());
+        s["doing"] = json!("d".repeat(900));
+        let v = validate(&body(json!([s]))).unwrap().sessions[0].clone();
+        assert_eq!(v["todos"].as_array().unwrap().len(), MAX_TODOS);
+        assert_eq!(v["doing"].as_str().unwrap().chars().count(), 400);
+    }
+
+    #[test]
+    fn un_ancien_expediteur_sans_ces_champs_reste_accepte() {
+        let v = validate(&body(json!([sess("abc")]))).unwrap().sessions[0].clone();
+        assert_eq!(v["todos"], json!([]));
+        assert_eq!(v["link"], Value::Null);
+        assert_eq!(v["title"], "");
     }
 
     #[test]

@@ -769,7 +769,7 @@ Synthèse déterministe (gabarits, sans LLM) : `text`, `runs`, `active`, `by_sta
 ### PUT /live-sessions/{machine} · GET /live-sessions
 Sessions Claude Code **actives**, une ligne par machine, remplacée à chaque envoi (aucun historique). Même authentification que `/runs` : `PUT` avec `x-runs-token` seul (sinon `404`), `GET` avec le token machine ou un JWT Logto en liste blanche.
 
-`PUT` : `{machine}` en `[a-z0-9-]` ≤ 64 ; corps ≤ 128 Ko, `{reported_at, sessions}` avec ≤ 200 sessions `{session_id, name, kind, status, cwd, pid, started_at}`. `session_id`, `kind` et `status` sont des identifiants stricts (`[A-Za-z0-9_-]`, ≤ 64/24/24), `name` ≤ 120 et `cwd` ≤ 300 sont tronqués, caractères de contrôle retirés. Réponse `200 {machine, sessions}`.
+`PUT` : `{machine}` en `[a-z0-9-]` ≤ 64 ; corps ≤ 256 Ko, `{reported_at, sessions}` avec ≤ 200 sessions `{session_id, name, kind, status, cwd, pid, started_at}` et, facultatifs, `title` (≤ 160), `last_prompt` (≤ 300), `doing` (≤ 400), `todos` (≤ 30 × `{content ≤ 200, status}`), `link` (uniquement `https://claude.ai/code/session_…`, sinon écarté) et `last_activity_at`. `session_id`, `kind` et `status` sont des identifiants stricts (`[A-Za-z0-9_-]`, ≤ 64/24/24), `name` ≤ 120 et `cwd` ≤ 300 sont tronqués, caractères de contrôle retirés. Réponse `200 {machine, sessions}`.
 
 `GET` : `{server_time, stale_after_secs, machines: [{machine, sessions, reported_at, updated_at, age_secs, stale}]}`. Une machine silencieuse depuis plus de 150 s (horloge du serveur) est `stale` : ses dernières sessions restent visibles mais ne sont pas actives.
 
