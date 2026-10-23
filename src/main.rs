@@ -6,7 +6,7 @@ mod routes;
 mod s3cache;
 mod sync;
 
-use axum::{Router, extract::DefaultBodyLimit, routing::{get, patch, post}};
+use axum::{Router, extract::DefaultBodyLimit, routing::{get, patch, post, put}};
 use axum::{extract::Request, http::StatusCode, middleware::{from_fn, Next}, response::Response};
 use tower_http::cors::{AllowHeaders, Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -111,6 +111,8 @@ async fn main() -> anyhow::Result<()> {
         // Automatisations : rapports des timers (token machine RUNS_WRITE_TOKEN)
         .route("/runs",                      post(routes::runs::create).layer(DefaultBodyLimit::max(routes::runs::MAX_BODY))
                                               .get(routes::runs::list))
+        .route("/live-sessions",             get(routes::live_sessions::list))
+        .route("/live-sessions/{machine}",   put(routes::live_sessions::put).layer(DefaultBodyLimit::max(routes::live_sessions::MAX_BODY)))
         .route("/automations/status",        get(routes::automations::status))
         .route("/digest",                    get(routes::digest::digest))
         .route("/runs/summary",              get(routes::runs::summary))

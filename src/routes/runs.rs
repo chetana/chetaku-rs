@@ -73,7 +73,7 @@ pub fn token_ok(expected: Option<&str>, given: &str) -> bool {
     }
 }
 
-fn valid_ident(s: &str, allow_extra: &str, max: usize) -> bool {
+pub(crate) fn valid_ident(s: &str, allow_extra: &str, max: usize) -> bool {
     !s.is_empty()
         && s.len() <= max
         && s.bytes().all(|c| c.is_ascii_alphanumeric() || allow_extra.as_bytes().contains(&c))
