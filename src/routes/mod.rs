@@ -15,3 +15,4 @@ pub mod automations;
 pub mod digest;
 pub mod live_sessions;
 pub mod impacts;
+pub mod lys;

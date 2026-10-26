@@ -133,6 +133,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/skills",                    post(routes::admin::create_skill))
         .route("/skills/{id}",               patch(routes::admin::update_skill).delete(routes::admin::delete_skill))
         .layer(cors)
+        // /lys porte son propre CORS et son garde d'auth ; TraceLayer et rate_limit ci-dessous le couvrent aussi.
+        .merge(routes::lys::router())
         .layer(TraceLayer::new_for_http())
         .layer(from_fn(rate_limit))
         .with_state(pool);
