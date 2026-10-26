@@ -6,7 +6,7 @@ use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
-    sync::{OnceLock, RwLock},
+    sync::{Arc, OnceLock, RwLock},
     time::{Duration, Instant},
 };
 
@@ -126,6 +126,18 @@ impl Authenticator {
         }
     }
 
+    /// Tests : clés injectées, aucun accès réseau (le JWKS est déclaré frais et déjà tenté).
+    #[cfg(test)]
+    pub fn with_static_keys(issuer: &str, audience: &str, keys: KeyMap) -> Self {
+        let now = Instant::now();
+        Authenticator {
+            jwks_url: "http://127.0.0.1:1/oidc/jwks".into(),
+            issuer: issuer.into(),
+            audience: audience.into(),
+            cache: RwLock::new(Cache { keys, fetched: Some(now), attempted: Some(now) }),
+        }
+    }
+
     fn needs_refresh(&self, kid: Option<&str>) -> bool {
         let c = self.cache.read().unwrap();
         let stale = c.fetched.map_or(true, |t| t.elapsed() > JWKS_TTL);
@@ -168,11 +180,70 @@ impl Authenticator {
 pub fn authenticator() -> Option<&'static Authenticator> {
     static A: OnceLock<Option<Authenticator>> = OnceLock::new();
     A.get_or_init(|| {
-        let endpoint = std::env::var("LOGTO_ENDPOINT").ok().filter(|s| !s.is_empty())?;
-        let audience = std::env::var("LOGTO_AUDIENCE").ok().filter(|s| !s.is_empty())?;
-        Some(Authenticator::new(&endpoint, &audience))
+        authenticator_from(
+            std::env::var("LOGTO_ENDPOINT").ok().as_deref(),
+            std::env::var("LOGTO_AUDIENCE").ok().as_deref(),
+        )
     })
     .as_ref()
+}
+
+/// Authenticator de lys-en-france : même Logto, audience propre (`LYS_LOGTO_AUDIENCE`).
+/// Un jeton d'une autre audience (job-dashboard) échoue donc à la validation.
+pub fn authenticator_lys() -> Option<Arc<Authenticator>> {
+    static A: OnceLock<Option<Arc<Authenticator>>> = OnceLock::new();
+    A.get_or_init(|| {
+        authenticator_from(
+            std::env::var("LOGTO_ENDPOINT").ok().as_deref(),
+            std::env::var("LYS_LOGTO_AUDIENCE").ok().as_deref(),
+        )
+        .map(Arc::new)
+    })
+    .clone()
+}
+
+fn authenticator_from(endpoint: Option<&str>, audience: Option<&str>) -> Option<Authenticator> {
+    let endpoint = endpoint.filter(|s| !s.is_empty())?;
+    let audience = audience.filter(|s| !s.is_empty())?;
+    Some(Authenticator::new(endpoint, audience))
+}
+
+/// Liste blanche lys-en-france : `sub` uniquement (jamais d'e-mail) ; variable absente ou vide → personne.
+pub fn allowed_lys() -> Arc<Allowed> {
+    static A: OnceLock<Arc<Allowed>> = OnceLock::new();
+    A.get_or_init(|| Arc::new(allowed_lys_from(std::env::var("LYS_ALLOWED_SUBS").ok().as_deref()))).clone()
+}
+
+fn allowed_lys_from(subs: Option<&str>) -> Allowed {
+    Allowed::new(subs.unwrap_or(""), "")
+}
+
+#[cfg(test)]
+mod lys_tests {
+    use super::*;
+
+    #[test]
+    fn allowed_lys_variable_absente_ou_vide_refuse_tout() {
+        let c = Claims { sub: "u1".into(), email: Some("a@b.c".into()) };
+        assert!(!allowed_lys_from(None).permits(&c));
+        assert!(!allowed_lys_from(Some("")).permits(&c));
+        assert!(!allowed_lys_from(Some(" , ")).permits(&c));
+        assert!(allowed_lys_from(Some("u1, u2")).permits(&c));
+    }
+
+    #[test]
+    fn allowed_lys_ignore_les_emails() {
+        let c = Claims { sub: "zzz".into(), email: Some("lys@example.com".into()) };
+        assert!(!allowed_lys_from(Some("lys@example.com")).permits(&c));
+    }
+
+    #[test]
+    fn authenticator_lys_exige_endpoint_et_audience() {
+        assert!(authenticator_from(None, Some("aud")).is_none());
+        assert!(authenticator_from(Some("https://auth.chetana.fr"), None).is_none());
+        assert!(authenticator_from(Some("https://auth.chetana.fr"), Some("")).is_none());
+        assert!(authenticator_from(Some("https://auth.chetana.fr"), Some("aud")).is_some());
+    }
 }
 
 #[cfg(test)]
