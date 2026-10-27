@@ -27,7 +27,7 @@ Tout le plan en un appel (instantané cohérent). Aucun paramètre.
 
 ```json
 {
-  "totals": { "tasks_done": 0, "tasks_total": 12, "items_done": 1, "items_total": 47 },
+  "totals": { "tasks_done": 0, "tasks_total": 12, "items_done": 1, "items_total": 44 },
   "next": {
     "slug": "vls-ts-anef",
     "category_slug": "sejour",
