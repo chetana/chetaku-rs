@@ -38,8 +38,10 @@ CREATE TABLE IF NOT EXISTS lys_fr.item (
     label_km    TEXT,
     done        BOOLEAN NOT NULL DEFAULT FALSE,
     done_at     TIMESTAMPTZ,
+    done_by     TEXT,                -- `sub` Logto de qui a coché
     km_status   TEXT NOT NULL DEFAULT 'none' CHECK (km_status IN ('none', 'draft', 'reviewed'))
 );
+ALTER TABLE lys_fr.item ADD COLUMN IF NOT EXISTS done_by TEXT;
 CREATE INDEX IF NOT EXISTS idx_lys_item_task ON lys_fr.item(task_slug, position);
 
 CREATE TABLE IF NOT EXISTS lys_fr.document (

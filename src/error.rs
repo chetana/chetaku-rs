@@ -20,6 +20,9 @@ pub enum AppError {
 
     #[error("Validation error: {0}")]
     Validation(String),
+
+    #[error("Unprocessable: {0}")]
+    Unprocessable(String),
 }
 
 impl IntoResponse for AppError {
@@ -34,6 +37,7 @@ impl IntoResponse for AppError {
             AppError::Unauthorized      => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
             AppError::Forbidden         => (StatusCode::FORBIDDEN, "Forbidden".to_string()),
             AppError::Validation(msg)   => (StatusCode::BAD_REQUEST, msg.clone()),
+            AppError::Unprocessable(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg.clone()),
         };
         (status, Json(json!({ "error": message }))).into_response()
     }
