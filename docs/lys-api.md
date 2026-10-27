@@ -8,7 +8,7 @@ Format unique : `{ "error": "<message>" }`.
 
 | Code | Cas |
 |---|---|
-| 400 | identifiant de document qui n'est pas un UUID canonique ; fichier vide ; JSON mal formé ; valeur refusée (statut hors liste, note > 2000 caractères ou avec caractère de contrôle autre que `\n`, corps PATCH vide) |
+| 400 | identifiant de document ou de rendez-vous qui n'est pas un UUID canonique ; `starts_at` hors 2026-01-01 à 2030-12-31 ; lieu > 200 ou note de rendez-vous > 500 caractères ; km-reviewed sur une tâche sans texte khmer ; fichier vide ; JSON mal formé ; valeur refusée (statut hors liste, note > 2000 caractères ou avec caractère de contrôle autre que `\n`, corps PATCH vide) |
 | 401 | jeton absent, invalide, expiré, mauvaise audience |
 | 403 | jeton valide, `sub` hors liste blanche (`{"error":"Forbidden"}`) : le front affiche la page « changer de compte » |
 | 404 | slug inconnu (`{"error":"Not found"}`) |
@@ -40,6 +40,17 @@ Tout le plan en un appel (instantané cohérent). Aucun paramètre.
     "effective_due": "2026-11-09",
     "legal_deadline": null
   },
+  "agenda": [
+    {
+      "type": "appointment", "date": "2026-11-09", "starts_at": "2026-11-09T13:30:00Z",
+      "place": "Préfecture de Melun", "note": "Apporter les originaux", "appointment_id": "123e4567-e89b-42d3-a456-426614174001",
+      "task_slug": "vls-ts-anef", "title_fr": "…", "title_km": null, "days_left": 13
+    },
+    {
+      "type": "due", "date": "2026-11-20", "starts_at": null, "place": null, "note": null, "appointment_id": null,
+      "task_slug": "cv", "title_fr": "…", "title_km": "…", "days_left": 24
+    }
+  ],
   "categories": [
     {
       "slug": "sejour", "position": 1, "title_fr": "Titre de séjour", "title_km": null,
@@ -53,7 +64,14 @@ Tout le plan en un appel (instantané cohérent). Aucun paramètre.
           "due_date": "2026-11-09", "due_override": null, "legal_deadline": null,
           "effective_due": "2026-11-09",
           "done_at": null,
-          "km_status": "none",
+          "km_status": "none", "km_reviewed_by": null, "km_reviewed_at": null,
+          "appointments": [
+            {
+              "id": "123e4567-e89b-42d3-a456-426614174001", "starts_at": "2026-11-09T13:30:00Z",
+              "place": "Préfecture de Melun", "note": "Apporter les originaux",
+              "created_by": "yjbv975dazhd", "created_at": "2026-10-27T18:02:11.123456Z"
+            }
+          ],
           "items_done": 1, "items_total": 8,
           "documents": [
             {
@@ -85,6 +103,18 @@ Types :
 - `documents` (par tâche, aussi dans la `task` renvoyée par `PUT /lys/items/{slug}/done` et `PATCH /lys/tasks/{slug}`) : documents non supprimés, du plus ancien au plus récent ; `[]` sans document. `item_slug` vaut `null` pour un document rattaché à la tâche seule. Jamais d'URL ici : voir `GET /lys/documents/{id}/url`.
 - Ordre : catégories par `position`, tâches par `position` dans leur catégorie, items par `position` dans leur tâche.
 - Compteurs `tasks_done` = tâches au statut `done`. Pas de champ `priority` en v1 (absent du schéma) : l'ordre vient de l'échéance puis de la position.
+
+### `agenda` (T3, champ ajouté ; les autres champs sont inchangés)
+
+Liste unique, triée par `date` croissante : les rendez-vous à venir (non annulés, `starts_at` ≥ maintenant) et les échéances des tâches **non `done`** (une tâche `blocked` compte).
+
+- `type` : `"appointment"` | `"due"` (échéance effective = `due_override`, sinon `due_date`) | `"legal"` (`legal_deadline`, distincte de `due` : une tâche peut produire les deux). Prévoir un repli pour un type inconnu.
+- `date` : jour `YYYY-MM-DD` **en heure de Paris** (pour un rendez-vous, le jour local de `starts_at`). `days_left` : entier, jours calendaires entre aujourd'hui (Paris) et `date` ; **négatif** = en retard (les échéances dépassées restent dans la liste, en tête). `0` = aujourd'hui.
+- À date égale : `legal`, puis `due`, puis rendez-vous par heure.
+- `starts_at`, `place`, `note`, `appointment_id` : renseignés pour `appointment`, `null` sinon. `task_slug` + `title_fr` + `title_km` (`null` si non traduit : retomber sur le français) pour tous.
+- `[]` si rien. Pas de pagination (quelques dizaines d'entrées au plus).
+
+`appointments` (par tâche, aussi dans la `task` renvoyée par `PUT items/…/done`, `PATCH tasks/…`, et les routes ci-dessous) : rendez-vous non annulés de la tâche, passés compris, triés par `starts_at` ; `[]` sans rendez-vous. `km_reviewed_by` / `km_reviewed_at` : qui et quand a relu le khmer (`null` sinon).
 
 ### Règle de `next` (« à faire maintenant »)
 
@@ -119,6 +149,30 @@ Corps JSON, tout champ inconnu → 422. Champs, tous optionnels, au moins un req
 Un champ absent n'est pas modifié. `status: "done"` pose `done_at` (conservé si déjà `done`) ; tout autre statut l'efface. Les cases ne sont pas touchées.
 
 Réponse `200` : `{ "task": <tâche complète avec items> }`. 404 si le slug est inconnu (vérifié après la validation du corps : un corps invalide sur un slug inconnu donne 400/422).
+
+## Rendez-vous
+
+### POST /lys/tasks/{slug}/appointments
+
+Corps (champ inconnu → 422) :
+
+| Champ | Type | Règle |
+|---|---|---|
+| `starts_at` | chaîne | obligatoire, ISO 8601 **avec fuseau** (`2026-11-09T14:30:00+01:00` ou `…Z` ; en JS : `new Date(local).toISOString()`). Illisible ou sans fuseau → 422 ; hors 2026-01-01 à 2030-12-31 → 400. Stocké en UTC |
+| `place` | chaîne ou `null` | ≤ 200 caractères, sans caractère de contrôle ; blanc = absent |
+| `note` | chaîne ou `null` | ≤ 500 caractères, sans caractère de contrôle sauf `\n` ; blanc = absent |
+
+`201 { "appointment": {id, starts_at, place, note, created_by, created_at}, "task": <tâche complète> }`. 404 si la tâche est inconnue (après validation du corps).
+
+### DELETE /lys/appointments/{id}
+
+`204` sans corps. Annulation douce (la ligne reste en base, `cancelled_at` posé), le rendez-vous disparaît du plan. Idempotent. `404` si l'`id` n'a jamais existé, `400` si ce n'est pas un UUID canonique.
+
+## Relecture du khmer
+
+### PUT /lys/tasks/{slug}/km-reviewed
+
+Corps : `{ "reviewed": true }` (seul champ, booléen strict, sinon 422). `true` : la tâche passe `km_status = "reviewed"`, `km_reviewed_by` = `sub` du jeton, `km_reviewed_at` = maintenant ; ses cases au khmer `draft` passent aussi `reviewed`. `false` : retour à `"draft"` (qui/quand effacés, cases `reviewed` repassées `draft`). Idempotent. `400` si la tâche n'a aucun texte khmer (`km_status = "none"`), `404` si le slug est inconnu. Réponse `200 { "task": <tâche complète> }`. Un texte `reviewed` n'est jamais écrasé par un rejeu du seed khmer. Le front retire la pastille « traduction automatique » quand `km_status` de la tâche vaut `reviewed`.
 
 ## Documents
 

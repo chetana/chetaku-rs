@@ -12,6 +12,7 @@ use axum::{
     Extension, Json, Router,
 };
 use chrono::{DateTime, NaiveDate, Utc};
+use chrono_tz::Europe::Paris;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
@@ -20,10 +21,16 @@ use tower_http::cors::{AllowHeaders, CorsLayer};
 
 use crate::auth::{self, Allowed, Authenticator, Claims};
 use crate::error::AppError;
-use crate::routes::lys_docs::{self, DocStore, DocumentOut};
+use crate::routes::lys_docs::{self, parse_doc_id, DocStore, DocumentOut};
+use uuid::Uuid;
 
 const MAX_BODY: usize = 16 * 1024;
 const MAX_NOTE_CHARS: usize = 2000;
+const MAX_PLACE_CHARS: usize = 200;
+const MAX_APPT_NOTE_CHARS: usize = 500;
+/// Bornes de `starts_at` : écarte les fautes de frappe d'année (0026, 2062) sans bloquer un vrai rendez-vous.
+const APPT_MIN: &str = "2026-01-01T00:00:00Z";
+const APPT_MAX: &str = "2030-12-31T23:59:59Z";
 const STATUSES: [&str; 4] = ["todo", "doing", "done", "blocked"];
 
 #[derive(Clone)]
@@ -55,6 +62,9 @@ fn router_with_store(authenticator: Option<Arc<Authenticator>>, allowed: Arc<All
         .route("/lys/plan", get(plan))
         .route("/lys/items/{slug}/done", put(put_item_done))
         .route("/lys/tasks/{slug}", patch(patch_task))
+        .route("/lys/tasks/{slug}/appointments", post(post_appointment))
+        .route("/lys/tasks/{slug}/km-reviewed", put(put_km_reviewed))
+        .route("/lys/appointments/{id}", delete(delete_appointment))
         .route("/lys/documents/{id}/url", get(lys_docs::read_url))
         .route("/lys/documents/{id}", delete(lys_docs::delete))
         // Limite de corps relevée sur cette seule route : la couche interne l'emporte sur les 16 Kio ci-dessous.
@@ -120,6 +130,20 @@ struct TaskRow {
     legal_deadline: Option<NaiveDate>,
     done_at: Option<DateTime<Utc>>,
     km_status: String,
+    km_reviewed_by: Option<String>,
+    km_reviewed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize)]
+struct AppointmentRow {
+    #[serde(skip)]
+    task_slug: String,
+    id: Uuid,
+    starts_at: DateTime<Utc>,
+    place: Option<String>,
+    note: Option<String>,
+    created_by: String,
+    created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -139,9 +163,10 @@ struct TaskOut {
     items_total: usize,
     items: Vec<ItemRow>,
     documents: Vec<DocumentOut>,
+    appointments: Vec<AppointmentRow>,
 }
 
-fn task_out(row: TaskRow, items: Vec<ItemRow>, documents: Vec<DocumentOut>) -> TaskOut {
+fn task_out(row: TaskRow, items: Vec<ItemRow>, documents: Vec<DocumentOut>, appointments: Vec<AppointmentRow>) -> TaskOut {
     TaskOut {
         effective_due: row.due_override.or(row.due_date),
         items_done: items.iter().filter(|i| i.done).count(),
@@ -149,11 +174,13 @@ fn task_out(row: TaskRow, items: Vec<ItemRow>, documents: Vec<DocumentOut>) -> T
         row,
         items,
         documents,
+        appointments,
     }
 }
 
 const TASK_COLS: &str = "slug, category_slug, position, title_fr, title_km, help_fr, help_km, status, note, \
-     due_date, due_override, legal_deadline, done_at, km_status";
+     due_date, due_override, legal_deadline, done_at, km_status, km_reviewed_by, km_reviewed_at";
+const APPT_COLS: &str = "task_slug, id, starts_at, place, note, created_by, created_at";
 const ITEM_COLS: &str = "task_slug, slug, kind, position, label_fr, label_km, done, done_at, done_by";
 
 /// Prochaine étape : première tâche ni terminée ni bloquée, par échéance effective
@@ -166,15 +193,24 @@ fn pick_next<'a>(tasks: &'a [TaskOut], cats: &[CategoryRow]) -> Option<&'a TaskO
         .min_by_key(|t| (t.effective_due.is_none(), t.effective_due, cat_pos(&t.row.category_slug), t.row.position))
 }
 
-fn build_plan(cats: Vec<CategoryRow>, tasks: Vec<TaskRow>, items: Vec<ItemRow>, docs: Vec<DocumentOut>) -> Value {
+fn build_plan(
+    cats: Vec<CategoryRow>,
+    tasks: Vec<TaskRow>,
+    items: Vec<ItemRow>,
+    docs: Vec<DocumentOut>,
+    appts: Vec<AppointmentRow>,
+    now: DateTime<Utc>,
+) -> Value {
     let outs: Vec<TaskOut> = tasks
         .into_iter()
         .map(|row| {
             let its = items.iter().filter(|i| i.task_slug == row.slug).cloned().collect();
             let ds = docs.iter().filter(|d| d.task_slug == row.slug).cloned().collect();
-            task_out(row, its, ds)
+            let ap = appts.iter().filter(|a| a.task_slug == row.slug).cloned().collect();
+            task_out(row, its, ds, ap)
         })
         .collect();
+    let agenda = build_agenda(&outs, now);
     let next = pick_next(&outs, &cats).map(|t| {
         json!({
             "slug": t.row.slug,
@@ -211,7 +247,51 @@ fn build_plan(cats: Vec<CategoryRow>, tasks: Vec<TaskRow>, items: Vec<ItemRow>, 
             })
         })
         .collect();
-    json!({ "totals": totals, "next": next, "categories": categories })
+    json!({ "totals": totals, "next": next, "agenda": agenda, "categories": categories })
+}
+
+/// Agenda global : rendez-vous à venir (non annulés) + échéances des tâches non terminées, triés par date.
+/// Une tâche peut produire une échéance `due` (effective : `due_override` sinon `due_date`) ET une échéance
+/// `legal` (réglementaire). Les échéances dépassées restent (jours restants négatifs) : elles pressent le plus.
+/// Dates et jours restants en heure de Paris. À date égale : `legal`, puis `due`, puis rendez-vous (par heure).
+fn build_agenda(tasks: &[TaskOut], now: DateTime<Utc>) -> Vec<Value> {
+    let today = now.with_timezone(&Paris).date_naive();
+    let mut entries: Vec<(NaiveDate, u8, Option<DateTime<Utc>>, Value)> = Vec::new();
+    for t in tasks {
+        let base = |kind: &str, date: NaiveDate| {
+            json!({
+                "type": kind,
+                "date": date,
+                "starts_at": null,
+                "place": null,
+                "note": null,
+                "appointment_id": null,
+                "task_slug": t.row.slug,
+                "title_fr": t.row.title_fr,
+                "title_km": t.row.title_km,
+                "days_left": (date - today).num_days(),
+            })
+        };
+        if t.row.status != "done" {
+            if let Some(d) = t.row.legal_deadline {
+                entries.push((d, 0, None, base("legal", d)));
+            }
+            if let Some(d) = t.effective_due {
+                entries.push((d, 1, None, base("due", d)));
+            }
+        }
+        for a in t.appointments.iter().filter(|a| a.starts_at >= now) {
+            let d = a.starts_at.with_timezone(&Paris).date_naive();
+            let mut v = base("appointment", d);
+            v["starts_at"] = json!(a.starts_at);
+            v["place"] = json!(a.place);
+            v["note"] = json!(a.note);
+            v["appointment_id"] = json!(a.id);
+            entries.push((d, 2, Some(a.starts_at), v));
+        }
+    }
+    entries.sort_by(|x, y| (x.0, x.1, x.2).cmp(&(y.0, y.1, y.2)));
+    entries.into_iter().map(|e| e.3).collect()
 }
 
 async fn plan(State(pool): State<PgPool>) -> Result<Json<Value>, AppError> {
@@ -229,8 +309,19 @@ async fn plan(State(pool): State<PgPool>) -> Result<Json<Value>, AppError> {
         .fetch_all(&mut *tx)
         .await?;
     let docs = lys_docs::list_active(&mut tx, None).await?;
+    let appts = list_appointments(&mut tx, None).await?;
     tx.commit().await?;
-    Ok(Json(build_plan(cats, tasks, items, docs)))
+    Ok(Json(build_plan(cats, tasks, items, docs, appts, Utc::now())))
+}
+
+async fn list_appointments(tx: &mut Transaction<'_, Postgres>, task_slug: Option<&str>) -> Result<Vec<AppointmentRow>, AppError> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {APPT_COLS} FROM lys_fr.appointment WHERE cancelled_at IS NULL AND ($1::text IS NULL OR task_slug = $1) \
+         ORDER BY starts_at, id"
+    ))
+    .bind(task_slug)
+    .fetch_all(&mut **tx)
+    .await?)
 }
 
 async fn load_task(tx: &mut Transaction<'_, Postgres>, slug: &str) -> Result<TaskOut, AppError> {
@@ -245,7 +336,8 @@ async fn load_task(tx: &mut Transaction<'_, Postgres>, slug: &str) -> Result<Tas
             .fetch_all(&mut **tx)
             .await?;
     let docs = lys_docs::list_active(tx, Some(slug)).await?;
-    Ok(task_out(row, items, docs))
+    let appts = list_appointments(tx, Some(slug)).await?;
+    Ok(task_out(row, items, docs, appts))
 }
 
 // ── Corps de requête ─────────────────────────────────────────────────────────
@@ -399,6 +491,136 @@ async fn patch_task(State(pool): State<PgPool>, Path(slug): Path<String>, body: 
     .bind(new_due)
     .execute(&mut *tx)
     .await?;
+    let task = load_task(&mut tx, &slug).await?;
+    tx.commit().await?;
+    Ok(Json(json!({ "task": task })))
+}
+
+// ── Rendez-vous et relecture khmère ──────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AppointmentBody {
+    starts_at: String,
+    place: Option<String>,
+    note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReviewedBody {
+    reviewed: bool,
+}
+
+/// `starts_at` : ISO 8601 / RFC 3339 avec fuseau (illisible → 422), entre 2026-01-01 et 2030-12-31 (sinon 400).
+fn parse_starts_at(raw: &str) -> Result<DateTime<Utc>, AppError> {
+    let parsed = DateTime::parse_from_rfc3339(raw)
+        .map_err(|_| AppError::Unprocessable("starts_at illisible (ISO 8601 avec fuseau attendu, ex. 2026-11-09T14:30:00+01:00)".into()))?
+        .with_timezone(&Utc);
+    let min = DateTime::parse_from_rfc3339(APPT_MIN).unwrap().with_timezone(&Utc);
+    let max = DateTime::parse_from_rfc3339(APPT_MAX).unwrap().with_timezone(&Utc);
+    if parsed < min || parsed > max {
+        return Err(AppError::Validation("starts_at hors de la plage 2026-01-01 à 2030-12-31".into()));
+    }
+    Ok(parsed)
+}
+
+/// Texte optionnel : vide ou blanc = absent ; au-delà de `max` caractères ou avec un caractère de contrôle
+/// (hors `\n` si `multiline`) → 400.
+fn clean_optional(field: &str, value: Option<String>, max: usize, multiline: bool) -> Result<Option<String>, AppError> {
+    let Some(v) = value else { return Ok(None) };
+    let v = v.trim().to_string();
+    if v.is_empty() {
+        return Ok(None);
+    }
+    if v.chars().count() > max {
+        return Err(AppError::Validation(format!("{field} trop long (max {max} caractères)")));
+    }
+    if v.chars().any(|c| c.is_control() && !(multiline && c == '\n')) {
+        return Err(AppError::Validation(format!("{field}: caractères de contrôle interdits")));
+    }
+    Ok(Some(v))
+}
+
+async fn post_appointment(
+    State(pool): State<PgPool>,
+    Extension(claims): Extension<Claims>,
+    Path(slug): Path<String>,
+    body: Bytes,
+) -> Result<(axum::http::StatusCode, Json<Value>), AppError> {
+    let b: AppointmentBody = parse_body(&body)?;
+    let starts_at = parse_starts_at(&b.starts_at)?;
+    let place = clean_optional("place", b.place, MAX_PLACE_CHARS, false)?;
+    let note = clean_optional("note", b.note, MAX_APPT_NOTE_CHARS, true)?;
+    let mut tx = pool.begin().await?;
+    let exists: Option<String> = sqlx::query_scalar("SELECT slug FROM lys_fr.task WHERE slug = $1 FOR SHARE")
+        .bind(&slug)
+        .fetch_optional(&mut *tx)
+        .await?;
+    exists.ok_or(AppError::NotFound)?;
+    let created: AppointmentRow = sqlx::query_as(&format!(
+        "INSERT INTO lys_fr.appointment (task_slug, starts_at, place, note, created_by) VALUES ($1, $2, $3, $4, $5) \
+         RETURNING {APPT_COLS}"
+    ))
+    .bind(&slug)
+    .bind(starts_at)
+    .bind(&place)
+    .bind(&note)
+    .bind(&claims.sub)
+    .fetch_one(&mut *tx)
+    .await?;
+    let task = load_task(&mut tx, &slug).await?;
+    tx.commit().await?;
+    Ok((axum::http::StatusCode::CREATED, Json(json!({ "appointment": created, "task": task }))))
+}
+
+async fn delete_appointment(State(pool): State<PgPool>, Path(raw): Path<String>) -> Result<axum::http::StatusCode, AppError> {
+    let id = parse_doc_id(&raw).ok_or_else(|| AppError::Validation("identifiant de rendez-vous invalide".into()))?;
+    let found = sqlx::query("UPDATE lys_fr.appointment SET cancelled_at = COALESCE(cancelled_at, now()) WHERE id = $1")
+        .bind(id)
+        .execute(&pool)
+        .await?
+        .rows_affected();
+    if found == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// `reviewed: true` : tâche et ses textes khmers déjà traduits passent `reviewed` (qui/quand) ; `false` : retour à
+/// `draft`. Une tâche sans texte khmer (`km_status = 'none'`) n'a rien à relire : 400.
+async fn put_km_reviewed(
+    State(pool): State<PgPool>,
+    Extension(claims): Extension<Claims>,
+    Path(slug): Path<String>,
+    body: Bytes,
+) -> Result<Json<Value>, AppError> {
+    let ReviewedBody { reviewed } = parse_body(&body)?;
+    let mut tx = pool.begin().await?;
+    let current: String = sqlx::query_scalar("SELECT km_status FROM lys_fr.task WHERE slug = $1 FOR UPDATE")
+        .bind(&slug)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if current == "none" {
+        return Err(AppError::Validation("aucun texte khmer à relire sur cette tâche".into()));
+    }
+    let (from, to) = if reviewed { ("draft", "reviewed") } else { ("reviewed", "draft") };
+    sqlx::query(
+        "UPDATE lys_fr.task SET km_status = $2, km_reviewed_by = CASE WHEN $2 = 'reviewed' THEN $3 END, \
+         km_reviewed_at = CASE WHEN $2 = 'reviewed' THEN now() END, updated_at = now() WHERE slug = $1",
+    )
+    .bind(&slug)
+    .bind(to)
+    .bind(&claims.sub)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("UPDATE lys_fr.item SET km_status = $3 WHERE task_slug = $1 AND km_status = $2")
+        .bind(&slug)
+        .bind(from)
+        .bind(to)
+        .execute(&mut *tx)
+        .await?;
     let task = load_task(&mut tx, &slug).await?;
     tx.commit().await?;
     Ok(Json(json!({ "task": task })))
@@ -567,7 +789,7 @@ mod tests {
         };
         let pool = sqlx::postgres::PgPoolOptions::new().max_connections(10).connect(&url).await.unwrap();
         let root_dir = env!("CARGO_MANIFEST_DIR");
-        for f in ["migrations/007_lys_en_france.sql", "migrations/seed/lys_fr_seed.sql"] {
+        for f in ["migrations/007_lys_en_france.sql", "migrations/008_lys_agenda.sql", "migrations/seed/lys_fr_seed.sql"] {
             let sql = std::fs::read_to_string(format!("{root_dir}/{f}")).unwrap();
             sqlx::raw_sql(&sql).execute(&pool).await.unwrap();
         }
@@ -787,6 +1009,9 @@ mod tests {
             (M::GET, "/lys/plan", None),
             (M::PUT, "/lys/items/cv.1/done", Some(r#"{"done":true}"#)),
             (M::PATCH, "/lys/tasks/cv", Some(r#"{"note":"x"}"#)),
+            (M::POST, "/lys/tasks/cv/appointments", Some(r#"{"starts_at":"2029-01-01T10:00:00Z"}"#)),
+            (M::DELETE, "/lys/appointments/123e4567-e89b-42d3-a456-426614174000", None),
+            (M::PUT, "/lys/tasks/cv/km-reviewed", Some(r#"{"reviewed":true}"#)),
         ];
         for (m, path, body) in routes {
             assert_eq!(a.call(m.clone(), path, None, body).await.0, StatusCode::UNAUTHORIZED, "{path}");
@@ -825,5 +1050,6 @@ mod tests {
         assert_eq!(st, if done { "doing" } else { "todo" });
     });
 
+    mod agenda_it;
     mod docs_it;
 }
