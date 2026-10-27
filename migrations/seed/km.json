@@ -1,0 +1,94 @@
+{
+  "category": {
+    "sejour": {"title_km": "ប័ណ្ណស្នាក់នៅ (titre de séjour)"},
+    "impots": {"title_km": "ពន្ធ"},
+    "sante": {"title_km": "សុខភាព"},
+    "banque-tel": {"title_km": "ធនាគារ និងទូរស័ព្ទ"},
+    "emploi": {"title_km": "ការងារ"},
+    "loisirs": {"title_km": "ការកម្សាន្ត"}
+  },
+  "task": {
+    "vls-ts-anef": {
+      "title_km": "បញ្ជាក់សុពលភាព VLS-TS (ទិដ្ឋាការស្នាក់នៅរយៈពេលវែង) នៅលើ ANEF (គេហទំព័ររដ្ឋសម្រាប់ជនបរទេស)",
+      "help_km": "គេហទំព័រ៖ administration-etrangers-en-france.interieur.gouv.fr ។ រយៈពេលកំណត់តាមច្បាប់៖ 3 ខែ បន្ទាប់ពីថ្ងៃចូលប្រទេស (មើលត្រាចូលប្រទេស)។ បើហួសរយៈពេលនេះ មិនអាចបញ្ជាក់សុពលភាពបានទៀតទេ ហើយការស្នាក់នៅក្លាយជាមិនស្របច្បាប់៖ សូមសរសេរថ្ងៃផុតកំណត់ពិតប្រាកដ ក្នុងប្រអប់ « échéance réglementaire » (កាលកំណត់តាមច្បាប់)។ ថ្លៃពន្ធ (taxe) បង់តាមអ៊ីនធឺណិត ហើយចំនួនទឹកប្រាក់ត្រូវបានបង្ហាញដោយ ANEF (តារាងថ្លៃដែលអនុវត្តចាប់ពីថ្ងៃ 01/05/2026)។"
+    },
+    "ofii-cir": {
+      "title_km": "OFII (ការិយាល័យជាតិអន្តោប្រវេសន៍ និងសមាហរណកម្ម)៖ កិច្ចសន្យាសមាហរណកម្មសាធារណរដ្ឋ (contrat d'intégration républicaine, CIR)",
+      "help_km": "ត្រូវធ្វើនៅពេលទទួលបានលិខិតកោះហៅ (convocation) ពី OFII ។ CIR ជាលក្ខខណ្ឌសម្រាប់ទទួលបានប័ណ្ណស្នាក់នៅច្រើនឆ្នាំ (carte pluriannuelle) នាពេលខាងមុខ។ ត្រូវបញ្ជាក់ (à confirmer)៖ លំដាប់ពិតប្រាកដនៃការកោះហៅ សម្រាប់ប្តី ឬប្រពន្ធរបស់ពលរដ្ឋបារាំង (រកមិនឃើញទំព័រផ្លូវការទេ)។"
+    },
+    "carte-pluriannuelle": {
+      "title_km": "ប័ណ្ណស្នាក់នៅច្រើនឆ្នាំ (carte pluriannuelle) « ជីវិតឯកជន និងគ្រួសារ » (vie privée et familiale)",
+      "help_km": "VLS-TS មានសុពលភាព 1 ឆ្នាំ ហើយមិនអាចពន្យារបានទេ៖ សូមដាក់ពាក្យសុំប័ណ្ណ ចន្លោះពី 4 ខែ ដល់ 2 ខែ មុនពេល VLS-TS ផុតកំណត់។ ការប្រឡងពលរដ្ឋ (examen civique) ជាកាតព្វកិច្ច ចាប់ពីថ្ងៃ 01/01/2026 សម្រាប់ប័ណ្ណស្នាក់នៅច្រើនឆ្នាំ។ សូមបំពេញ « échéance réglementaire » (កាលកំណត់តាមច្បាប់) ដើម្បីឲ្យមានការរំលឹក។"
+    },
+    "sip-lagny": {
+      "title_km": "SIP (ការិយាល័យពន្ធសម្រាប់បុគ្គល) នៅ Lagny-sur-Marne (3 rue Delambre, 77400)",
+      "help_km": "ដំបូង សូមប្រកាសអាពាហ៍ពិពាហ៍តាមអ៊ីនធឺណិត (espace particulier ជាគណនីពន្ធផ្ទាល់ខ្លួន › Gérer mon prélèvement à la source › changement de situation)។ ទៅបញ្ជរ (guichet) តែនៅពេលមានការរាំងស្ទះប៉ុណ្ណោះ។ រយៈពេលកំណត់ 60 ថ្ងៃ បន្ទាប់ពីព្រឹត្តិការណ៍៖ មិនទាន់បានផ្ទៀងផ្ទាត់ (non vérifié) សម្រាប់អាពាហ៍ពិពាហ៍ដែលបានធ្វើយូរហើយ។ ត្រូវបញ្ជាក់ (à confirmer)៖ ម៉ោងបើករបស់ SIP និងថាតើ SIP នេះទទួលខុសត្រូវលើក្រុង (commune) ដែលយើងរស់នៅឬទេ (espace particulier › Contact et RDV)។"
+    },
+    "cpam-puma": {
+      "title_km": "បើកសិទ្ធិធានារ៉ាប់រងសុខភាពនៅ CPAM 77 (ការិយាល័យធានារ៉ាប់រងសុខភាព) (PUMa ៖ ធានារ៉ាប់រងសុខភាពសកល) ក្នុងនាម Lys ផ្ទាល់",
+      "help_km": "សិទ្ធិផ្ទាល់ខ្លួន (ឋានៈ « ayant droit » សម្រាប់មនុស្សពេញវ័យ ពោលគឺការមានសិទ្ធិតាមរយៈប្តីឬប្រពន្ធ លែងមានទៀតហើយ ចាប់តាំងពីមាន PUMa)។ ទម្រង់ S1106 ។ NIR (លេខសន្តិសុខសង្គម) បណ្តោះអាសន្ន រួចលេខស្ថាពរ គណនី ameli (គេហទំព័ររបស់ CPAM) និងកាត Vitale (កាតសុខភាព)។ លក្ខខណ្ឌរស់នៅជាប់លាប់ 3 ខែ អាចត្រូវលើកលែង សម្រាប់សមាជិកគ្រួសារដែលមកនៅជាមួយអ្នកមានធានារ៉ាប់រង៖ ត្រូវបញ្ជាក់ជាមួយ CPAM (à confirmer)។ ការបកប្រែដោយអ្នកបកប្រែស្បថ (traduction assermentée) នៃសំបុត្រកំណើត (acte de naissance) គឺជាជំហានដែលចំណាយពេលយូរជាងគេ។"
+    },
+    "mutuelle": {
+      "title_km": "ធានារ៉ាប់រងសុខភាពបន្ថែម (mutuelle) តាមក្រុមហ៊ុនរបស់ Chetana",
+      "help_km": "បន្ថែម Lys ជាអ្នកទទួលផល (« ayant droit » តាមន័យនៃកិច្ចសន្យា)។ ពិនិត្យក្នុងឯកសារលក្ខខណ្ឌ (notice) នូវរយៈពេលកំណត់ បន្ទាប់ពីអាពាហ៍ពិពាហ៍ ឬបន្ទាប់ពីការមកដល់។"
+    },
+    "banque-rdv": {"title_km": "ការណាត់ជួបនៅធនាគារ"},
+    "forfait-mobile": {"title_km": "គម្រោងទូរស័ព្ទចល័ត (forfait mobile)"},
+    "france-travail": {
+      "title_km": "France Travail (ការិយាល័យរដ្ឋសម្រាប់ស្វែងរកការងារ)",
+      "help_km": "ត្រូវធ្វើបន្ទាប់ពីបានបញ្ជាក់សុពលភាព VLS-TS រួច។ ប័ណ្ណស្នាក់នៅ « vie privée et familiale » (ជីវិតឯកជន និងគ្រួសារ) អនុញ្ញាតឲ្យធ្វើការបាន។"
+    },
+    "garde-enfants": {"title_km": "ស្វែងរកការមើលថែកុមារ (garde d'enfants) នៅ Val d'Europe"},
+    "cv": {"title_km": "រៀបចំ CV (ប្រវត្តិរូបសង្ខេប)"},
+    "disney-noel": {
+      "title_km": "Disneyland, Noël Enchanté (កម្មវិធីបុណ្យណូអែល)",
+      "help_km": "តម្លៃប្រហាក់ប្រហែល មិនទាន់បានផ្ទៀងផ្ទាត់ (non vérifié)៖ សូមពិនិត្យនៅលើគេហទំព័រ មុនពេលកក់។"
+    }
+  },
+  "item": {
+    "vls-ts-anef.1": {"text_km": "បង្កើតគណនី ANEF"},
+    "vls-ts-anef.2": {"text_km": "បញ្ចូលទិដ្ឋាការ ថ្ងៃចូលប្រទេស និងអាសយដ្ឋាននៅប្រទេសបារាំង"},
+    "vls-ts-anef.3": {"text_km": "បង់ថ្លៃពន្ធ (taxe) តាមអ៊ីនធឺណិត (ចំនួនទឹកប្រាក់ត្រូវបានបង្ហាញដោយ ANEF)"},
+    "vls-ts-anef.4": {"text_km": "ទាញយកលិខិតបញ្ជាក់សុពលភាព (attestation de validation)"},
+    "vls-ts-anef.5": {"text_km": "លិខិតឆ្លងដែនដែលមានទិដ្ឋាការ (passeport avec le visa)"},
+    "vls-ts-anef.6": {"text_km": "ត្រាចូលប្រទេស (tampon d'entrée) (ថតរូប)"},
+    "vls-ts-anef.7": {"text_km": "ឯកសារបញ្ជាក់ទីលំនៅ (justificatif de domicile)"},
+    "vls-ts-anef.8": {"text_km": "កាតធនាគារ និងអាសយដ្ឋានអ៊ីមែល"},
+    "ofii-cir.1": {"text_km": "ឆ្លើយតបលិខិតកោះហៅ (convocation) របស់ OFII"},
+    "ofii-cir.2": {"text_km": "ការសម្ភាសន៍ និងការធ្វើតេស្តភាសាបារាំង"},
+    "ofii-cir.3": {"text_km": "ចុះហត្ថលេខាលើ CIR"},
+    "ofii-cir.4": {"text_km": "ចូលរៀនវគ្គបណ្តុះបណ្តាលពលរដ្ឋ (formation civique) (4 ថ្ងៃ)"},
+    "ofii-cir.5": {"text_km": "លិខិតឆ្លងដែន (passeport) និងលិខិតបញ្ជាក់សុពលភាព VLS-TS (attestation de validation du VLS-TS)"},
+    "carte-pluriannuelle.1": {"text_km": "ដាក់ពាក្យសុំនៅលើ ANEF (4 ទៅ 2 ខែ មុនពេល VLS-TS ផុតកំណត់)"},
+    "carte-pluriannuelle.2": {"text_km": "ប្រឡងពលរដ្ឋ (examen civique)"},
+    "carte-pluriannuelle.3": {"text_km": "ភស្តុតាងនៃការរស់នៅជាមួយគ្នា (preuves de communauté de vie)"},
+    "carte-pluriannuelle.4": {"text_km": "លិខិតបញ្ជាក់ CIR (attestation du CIR)"},
+    "sip-lagny.1": {"text_km": "ប្រកាសអាពាហ៍ពិពាហ៍តាមអ៊ីនធឺណិត (changement de situation ៖ ការផ្លាស់ប្តូរស្ថានភាព)"},
+    "sip-lagny.2": {"text_km": "ទទួលលេខពន្ធ (numéro fiscal) របស់ Lys (នៅ SIP បើនាងមិនទាន់មានលេខនេះ)"},
+    "sip-lagny.3": {"text_km": "ពិនិត្យអត្រាថ្មីនៃការកាត់ពន្ធពីប្រាក់ចំណូលដោយផ្ទាល់ (prélèvement à la source) (គ្រួសារ (foyer), 2 ចំណែក (parts))"},
+    "sip-lagny.4": {"text_km": "លិខិតឆ្លងដែនរបស់ប្តីប្រពន្ធ (passeports)"},
+    "sip-lagny.5": {"text_km": "VLS-TS ដែលបានបញ្ជាក់សុពលភាពរួច (VLS-TS validé)"},
+    "sip-lagny.6": {"text_km": "សំបុត្រអាពាហ៍ពិពាហ៍ដែលបានចុះបញ្ជីនៅប្រទេសបារាំង (acte de mariage transcrit)"},
+    "sip-lagny.7": {"text_km": "ឯកសារបញ្ជាក់ទីលំនៅរួមគ្នា (justificatif de domicile commun)"},
+    "cpam-puma.1": {"text_km": "បំពេញទម្រង់ S1106"},
+    "cpam-puma.2": {"text_km": "ទទួល NIR (លេខសន្តិសុខសង្គម) បណ្តោះអាសន្ន រួចលេខស្ថាពរ"},
+    "cpam-puma.3": {"text_km": "បង្កើតគណនី ameli"},
+    "cpam-puma.4": {"text_km": "ទទួលកាត Vitale"},
+    "cpam-puma.5": {"text_km": "លិខិតឆ្លងដែន (passeport) និងលិខិតបញ្ជាក់សុពលភាព VLS-TS (attestation de validation du VLS-TS)"},
+    "cpam-puma.6": {"text_km": "សំបុត្រកំណើត (acte de naissance) ច្បាប់ចម្លងពេញលេញ មានឈ្មោះឪពុកម្តាយ (copie intégrale avec filiation) និងការបកប្រែដោយអ្នកបកប្រែស្បថ (traducteur assermenté)"},
+    "cpam-puma.7": {"text_km": "សំបុត្រអាពាហ៍ពិពាហ៍ (acte de mariage)"},
+    "cpam-puma.8": {"text_km": "ឯកសារបញ្ជាក់ទីលំនៅ (justificatif de domicile) និង RIB (ឯកសារលេខគណនីធនាគារ)"},
+    "mutuelle.1": {"text_km": "បន្ថែម Lys ជាអ្នកទទួលផល"},
+    "mutuelle.2": {"text_km": "ពិនិត្យរយៈពេលកំណត់ដែលមានចែងក្នុងឯកសារលក្ខខណ្ឌ (notice)"},
+    "mutuelle.3": {"text_km": "សំបុត្រអាពាហ៍ពិពាហ៍ (acte de mariage) និង NIR របស់ Lys (នៅពេលមាន)"},
+    "banque-rdv.1": {"text_km": "ធ្វើការណាត់ជួប"},
+    "banque-rdv.2": {"text_km": "លិខិតឆ្លងដែន (passeport) និងឯកសារបញ្ជាក់ទីលំនៅ (justificatif de domicile)"},
+    "forfait-mobile.1": {"text_km": "ជ្រើសរើស និងចុះឈ្មោះប្រើគម្រោងទូរស័ព្ទ (forfait)"},
+    "forfait-mobile.2": {"text_km": "លិខិតឆ្លងដែន (passeport) និងឯកសារបញ្ជាក់ទីលំនៅ (justificatif de domicile)"},
+    "france-travail.1": {"text_km": "ចុះឈ្មោះនៅ France Travail"},
+    "france-travail.2": {"text_km": "លិខិតបញ្ជាក់សុពលភាព VLS-TS (attestation de validation du VLS-TS)"},
+    "garde-enfants.1": {"text_km": "ស្វែងរកការមើលថែកុមារ (garde d'enfants)"},
+    "cv.1": {"text_km": "សរសេរ CV"},
+    "disney-noel.1": {"text_km": "កក់សំបុត្រដែលមានកាលបរិច្ឆេទ"}
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "category": {
+    "sejour": {"title_km": "Carte de séjour (titre de séjour)"},
+    "impots": {"title_km": "Impôts"},
+    "sante": {"title_km": "Santé"},
+    "banque-tel": {"title_km": "Banque et téléphone"},
+    "emploi": {"title_km": "Travail"},
+    "loisirs": {"title_km": "Divertissement"}
+  },
+  "task": {
+    "vls-ts-anef": {
+      "title_km": "Confirmer la validité du VLS-TS (visa de séjour de longue durée) sur l'ANEF (site de l'État pour les étrangers)",
+      "help_km": "Site web : administration-etrangers-en-france.interieur.gouv.fr. Délai fixé par la loi : 3 mois après le jour d'entrée dans le pays (voir le tampon d'entrée). Si ce délai est dépassé, on ne peut plus confirmer la validité et le séjour devient illégal : écrivez la date limite exacte dans la case « échéance réglementaire » (échéance légale). La taxe (taxe) se paie en ligne et le montant est affiché par l'ANEF (barème appliqué depuis le 01/05/2026)."
+    },
+    "ofii-cir": {
+      "title_km": "OFII (Office national de l'immigration et de l'intégration) : contrat d'intégration de la République (contrat d'intégration républicaine, CIR)",
+      "help_km": "À faire quand on reçoit la lettre de convocation (convocation) de l'OFII. Le CIR est une condition pour obtenir la carte de séjour de plusieurs années (carte pluriannuelle) à l'avenir. À confirmer (à confirmer) : l'ordre exact des convocations pour le mari ou la femme d'un citoyen français (aucune page officielle trouvée)."
+    },
+    "carte-pluriannuelle": {
+      "title_km": "Carte de séjour de plusieurs années (carte pluriannuelle) « vie privée et famille » (vie privée et familiale)",
+      "help_km": "Le VLS-TS est valable 1 an et ne peut pas être prolongé : faites la demande de carte entre 4 mois et 2 mois avant l'expiration du VLS-TS. L'examen de citoyenneté (examen civique) est obligatoire depuis le 01/01/2026 pour la carte de séjour de plusieurs années. Remplissez « échéance réglementaire » (échéance légale) pour qu'il y ait un rappel."
+    },
+    "sip-lagny": {
+      "title_km": "SIP (bureau des impôts pour les particuliers) à Lagny-sur-Marne (3 rue Delambre, 77400)",
+      "help_km": "D'abord, déclarez le mariage en ligne (espace particulier, c'est-à-dire le compte fiscal personnel › Gérer mon prélèvement à la source › changement de situation). Allez au guichet (guichet) seulement en cas de blocage. Délai de 60 jours après l'événement : pas encore vérifié (non vérifié) pour un mariage fait il y a longtemps. À confirmer (à confirmer) : les horaires d'ouverture du SIP, et si ce SIP est responsable de la commune (commune) où nous habitons (espace particulier › Contact et RDV)."
+    },
+    "cpam-puma": {
+      "title_km": "Ouvrir les droits à l'assurance maladie à la CPAM 77 (bureau d'assurance maladie) (PUMa : assurance maladie universelle) au nom de Lys elle-même",
+      "help_km": "Droits personnels (le statut « ayant droit » pour un adulte, c'est-à-dire avoir des droits par le mari ou la femme, n'existe plus depuis la PUMa). Formulaire S1106. NIR (numéro de sécurité sociale) provisoire puis numéro définitif, compte ameli (site de la CPAM) et carte Vitale (carte de santé). La condition de résidence stable de 3 mois peut être levée pour un membre de la famille qui vient vivre avec un assuré : à confirmer avec la CPAM (à confirmer). La traduction par un traducteur assermenté (traduction assermentée) de l'acte de naissance (acte de naissance) est l'étape qui prend le plus de temps."
+    },
+    "mutuelle": {
+      "title_km": "Assurance santé complémentaire (mutuelle) par l'entreprise de Chetana",
+      "help_km": "Ajouter Lys comme bénéficiaire (« ayant droit » au sens du contrat). Vérifier dans le document de conditions (notice) le délai après le mariage ou après l'arrivée."
+    },
+    "banque-rdv": {"title_km": "Rendez-vous à la banque"},
+    "forfait-mobile": {"title_km": "Forfait de téléphone portable (forfait mobile)"},
+    "france-travail": {
+      "title_km": "France Travail (bureau de l'État pour chercher du travail)",
+      "help_km": "À faire après avoir confirmé la validité du VLS-TS. La carte de séjour « vie privée et familiale » (vie privée et famille) permet de travailler."
+    },
+    "garde-enfants": {"title_km": "Chercher une garde d'enfants (garde d'enfants) à Val d'Europe"},
+    "cv": {"title_km": "Préparer le CV (curriculum vitae)"},
+    "disney-noel": {
+      "title_km": "Disneyland, Noël Enchanté (programme de la fête de Noël)",
+      "help_km": "Prix approximatif pas encore vérifié (non vérifié) : vérifiez sur le site avant de réserver."
+    }
+  },
+  "item": {
+    "vls-ts-anef.1": {"text_km": "Créer le compte ANEF"},
+    "vls-ts-anef.2": {"text_km": "Saisir le visa, le jour d'entrée dans le pays et l'adresse en France"},
+    "vls-ts-anef.3": {"text_km": "Payer la taxe (taxe) en ligne (le montant est affiché par l'ANEF)"},
+    "vls-ts-anef.4": {"text_km": "Télécharger l'attestation de validité (attestation de validation)"},
+    "vls-ts-anef.5": {"text_km": "Passeport qui contient le visa (passeport avec le visa)"},
+    "vls-ts-anef.6": {"text_km": "Tampon d'entrée dans le pays (tampon d'entrée) (prendre une photo)"},
+    "vls-ts-anef.7": {"text_km": "Document justifiant le domicile (justificatif de domicile)"},
+    "vls-ts-anef.8": {"text_km": "Carte bancaire et adresse e-mail"},
+    "ofii-cir.1": {"text_km": "Répondre à la lettre de convocation (convocation) de l'OFII"},
+    "ofii-cir.2": {"text_km": "Entretien et test de langue française"},
+    "ofii-cir.3": {"text_km": "Signer le CIR"},
+    "ofii-cir.4": {"text_km": "Suivre la formation de citoyenneté (formation civique) (4 jours)"},
+    "ofii-cir.5": {"text_km": "Passeport (passeport) et attestation de validité du VLS-TS (attestation de validation du VLS-TS)"},
+    "carte-pluriannuelle.1": {"text_km": "Déposer la demande sur l'ANEF (4 à 2 mois avant l'expiration du VLS-TS)"},
+    "carte-pluriannuelle.2": {"text_km": "Passer l'examen de citoyenneté (examen civique)"},
+    "carte-pluriannuelle.3": {"text_km": "Preuves de la vie commune (preuves de communauté de vie)"},
+    "carte-pluriannuelle.4": {"text_km": "Attestation du CIR (attestation du CIR)"},
+    "sip-lagny.1": {"text_km": "Déclarer le mariage en ligne (changement de situation : changement de situation)"},
+    "sip-lagny.2": {"text_km": "Obtenir le numéro fiscal (numéro fiscal) de Lys (au SIP si elle n'a pas encore ce numéro)"},
+    "sip-lagny.3": {"text_km": "Vérifier le nouveau taux de l'impôt prélevé directement sur le revenu (prélèvement à la source) (foyer (foyer), 2 parts (parts))"},
+    "sip-lagny.4": {"text_km": "Passeports du couple (passeports)"},
+    "sip-lagny.5": {"text_km": "VLS-TS dont la validité a été confirmée (VLS-TS validé)"},
+    "sip-lagny.6": {"text_km": "Acte de mariage enregistré en France (acte de mariage transcrit)"},
+    "sip-lagny.7": {"text_km": "Justificatif de domicile commun (justificatif de domicile commun)"},
+    "cpam-puma.1": {"text_km": "Remplir le formulaire S1106"},
+    "cpam-puma.2": {"text_km": "Obtenir le NIR (numéro de sécurité sociale) provisoire, puis le numéro définitif"},
+    "cpam-puma.3": {"text_km": "Créer le compte ameli"},
+    "cpam-puma.4": {"text_km": "Recevoir la carte Vitale"},
+    "cpam-puma.5": {"text_km": "Passeport (passeport) et attestation de validité du VLS-TS (attestation de validation du VLS-TS)"},
+    "cpam-puma.6": {"text_km": "Acte de naissance (acte de naissance), copie complète avec les noms des parents (copie intégrale avec filiation), et traduction par un traducteur assermenté (traducteur assermenté)"},
+    "cpam-puma.7": {"text_km": "Acte de mariage (acte de mariage)"},
+    "cpam-puma.8": {"text_km": "Justificatif de domicile (justificatif de domicile) et RIB (document avec le numéro de compte bancaire)"},
+    "mutuelle.1": {"text_km": "Ajouter Lys comme bénéficiaire"},
+    "mutuelle.2": {"text_km": "Vérifier le délai indiqué dans le document de conditions (notice)"},
+    "mutuelle.3": {"text_km": "Acte de mariage (acte de mariage) et NIR de Lys (quand il existe)"},
+    "banque-rdv.1": {"text_km": "Prendre rendez-vous"},
+    "banque-rdv.2": {"text_km": "Passeport (passeport) et justificatif de domicile (justificatif de domicile)"},
+    "forfait-mobile.1": {"text_km": "Choisir et s'inscrire à un forfait téléphonique (forfait)"},
+    "forfait-mobile.2": {"text_km": "Passeport (passeport) et justificatif de domicile (justificatif de domicile)"},
+    "france-travail.1": {"text_km": "S'inscrire à France Travail"},
+    "france-travail.2": {"text_km": "Attestation de validité du VLS-TS (attestation de validation du VLS-TS)"},
+    "garde-enfants.1": {"text_km": "Chercher une garde d'enfants (garde d'enfants)"},
+    "cv.1": {"text_km": "Écrire le CV"},
+    "disney-noel.1": {"text_km": "Réserver un billet avec une date"}
+  }
+}
