@@ -23,6 +23,20 @@ pub enum AppError {
 
     #[error("Unprocessable: {0}")]
     Unprocessable(String),
+
+    #[error("Payload too large")]
+    PayloadTooLarge,
+
+    #[error("Unsupported media type")]
+    UnsupportedMediaType,
+
+    /// Fonctionnalité non configurée (ex. stockage des documents sans variables LYS_S3_*).
+    #[error("Unavailable")]
+    Unavailable,
+
+    /// Échec d'un service de stockage : le détail reste dans les logs, jamais dans la réponse.
+    #[error("Storage error")]
+    Storage,
 }
 
 impl IntoResponse for AppError {
@@ -38,6 +52,13 @@ impl IntoResponse for AppError {
             AppError::Forbidden         => (StatusCode::FORBIDDEN, "Forbidden".to_string()),
             AppError::Validation(msg)   => (StatusCode::BAD_REQUEST, msg.clone()),
             AppError::Unprocessable(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg.clone()),
+            AppError::PayloadTooLarge    => (StatusCode::PAYLOAD_TOO_LARGE, "Payload too large".to_string()),
+            AppError::UnsupportedMediaType => (
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "type de fichier refusé (PDF, JPEG, PNG ou HEIC attendu)".to_string(),
+            ),
+            AppError::Unavailable        => (StatusCode::SERVICE_UNAVAILABLE, "stockage indisponible".to_string()),
+            AppError::Storage            => (StatusCode::BAD_GATEWAY, "stockage en erreur".to_string()),
         };
         (status, Json(json!({ "error": message }))).into_response()
     }
