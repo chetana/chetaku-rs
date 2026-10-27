@@ -8,7 +8,7 @@ use axum::{
     http::{header, HeaderValue, Method},
     middleware::{from_fn_with_state, Next},
     response::Response,
-    routing::{get, patch, put},
+    routing::{delete, get, patch, post, put},
     Extension, Json, Router,
 };
 use chrono::{DateTime, NaiveDate, Utc};
@@ -20,6 +20,7 @@ use tower_http::cors::{AllowHeaders, CorsLayer};
 
 use crate::auth::{self, Allowed, Authenticator, Claims};
 use crate::error::AppError;
+use crate::routes::lys_docs::{self, DocStore, DocumentOut};
 
 const MAX_BODY: usize = 16 * 1024;
 const MAX_NOTE_CHARS: usize = 2000;
@@ -33,10 +34,15 @@ struct LysAuth {
 
 /// Routeur de production : audience et liste blanche lues dans l'environnement.
 pub fn router() -> Router<PgPool> {
-    router_with(auth::authenticator_lys(), auth::allowed_lys())
+    router_with_store(auth::authenticator_lys(), auth::allowed_lys(), DocStore::from_env())
 }
 
+#[cfg(test)]
 fn router_with(authenticator: Option<Arc<Authenticator>>, allowed: Arc<Allowed>) -> Router<PgPool> {
+    router_with_store(authenticator, allowed, DocStore::disabled())
+}
+
+fn router_with_store(authenticator: Option<Arc<Authenticator>>, allowed: Arc<Allowed>, store: DocStore) -> Router<PgPool> {
     let cors = CorsLayer::new()
         .allow_origin([
             HeaderValue::from_static("https://lys-en-france.chetana.fr"),
@@ -49,7 +55,15 @@ fn router_with(authenticator: Option<Arc<Authenticator>>, allowed: Arc<Allowed>)
         .route("/lys/plan", get(plan))
         .route("/lys/items/{slug}/done", put(put_item_done))
         .route("/lys/tasks/{slug}", patch(patch_task))
+        .route("/lys/documents/{id}/url", get(lys_docs::read_url))
+        .route("/lys/documents/{id}", delete(lys_docs::delete))
+        // Limite de corps relevée sur cette seule route : la couche interne l'emporte sur les 16 Kio ci-dessous.
+        .route(
+            "/lys/tasks/{slug}/documents",
+            post(lys_docs::upload).layer(DefaultBodyLimit::max(lys_docs::MAX_UPLOAD)),
+        )
         .layer(DefaultBodyLimit::max(MAX_BODY))
+        .layer(Extension(store))
         .route_layer(from_fn_with_state(LysAuth { authenticator, allowed }, guard))
         // CORS à l'extérieur du garde : un préflight n'a pas d'Authorization.
         .layer(cors)
@@ -124,15 +138,17 @@ struct TaskOut {
     items_done: usize,
     items_total: usize,
     items: Vec<ItemRow>,
+    documents: Vec<DocumentOut>,
 }
 
-fn task_out(row: TaskRow, items: Vec<ItemRow>) -> TaskOut {
+fn task_out(row: TaskRow, items: Vec<ItemRow>, documents: Vec<DocumentOut>) -> TaskOut {
     TaskOut {
         effective_due: row.due_override.or(row.due_date),
         items_done: items.iter().filter(|i| i.done).count(),
         items_total: items.len(),
         row,
         items,
+        documents,
     }
 }
 
@@ -150,12 +166,13 @@ fn pick_next<'a>(tasks: &'a [TaskOut], cats: &[CategoryRow]) -> Option<&'a TaskO
         .min_by_key(|t| (t.effective_due.is_none(), t.effective_due, cat_pos(&t.row.category_slug), t.row.position))
 }
 
-fn build_plan(cats: Vec<CategoryRow>, tasks: Vec<TaskRow>, items: Vec<ItemRow>) -> Value {
+fn build_plan(cats: Vec<CategoryRow>, tasks: Vec<TaskRow>, items: Vec<ItemRow>, docs: Vec<DocumentOut>) -> Value {
     let outs: Vec<TaskOut> = tasks
         .into_iter()
         .map(|row| {
             let its = items.iter().filter(|i| i.task_slug == row.slug).cloned().collect();
-            task_out(row, its)
+            let ds = docs.iter().filter(|d| d.task_slug == row.slug).cloned().collect();
+            task_out(row, its, ds)
         })
         .collect();
     let next = pick_next(&outs, &cats).map(|t| {
@@ -211,8 +228,9 @@ async fn plan(State(pool): State<PgPool>) -> Result<Json<Value>, AppError> {
     let items: Vec<ItemRow> = sqlx::query_as(&format!("SELECT {ITEM_COLS} FROM lys_fr.item ORDER BY position, slug"))
         .fetch_all(&mut *tx)
         .await?;
+    let docs = lys_docs::list_active(&mut tx, None).await?;
     tx.commit().await?;
-    Ok(Json(build_plan(cats, tasks, items)))
+    Ok(Json(build_plan(cats, tasks, items, docs)))
 }
 
 async fn load_task(tx: &mut Transaction<'_, Postgres>, slug: &str) -> Result<TaskOut, AppError> {
@@ -226,7 +244,8 @@ async fn load_task(tx: &mut Transaction<'_, Postgres>, slug: &str) -> Result<Tas
             .bind(slug)
             .fetch_all(&mut **tx)
             .await?;
-    Ok(task_out(row, items))
+    let docs = lys_docs::list_active(tx, Some(slug)).await?;
+    Ok(task_out(row, items, docs))
 }
 
 // ── Corps de requête ─────────────────────────────────────────────────────────
@@ -805,4 +824,6 @@ mod tests {
         ).fetch_one(&a.pool).await.unwrap();
         assert_eq!(st, if done { "doing" } else { "todo" });
     });
+
+    mod docs_it;
 }

@@ -138,3 +138,42 @@ pub async fn put_bytes(path: &str, body: &[u8], content_type: &str) -> Result<()
         .map(|_| ())
         .map_err(|e| e.to_string())
 }
+
+/// Construit un bucket depuis des valeurs explicites. `path_style` : requis par les S3 auto-hébergés
+/// (MinIO, RustFS) ; Scaleway accepte le style « sous-domaine » par défaut.
+pub(crate) fn build_bucket(
+    name: &str,
+    access: &str,
+    secret: &str,
+    region_name: &str,
+    endpoint: &str,
+    path_style: bool,
+) -> Option<Box<Bucket>> {
+    let region = Region::Custom { region: region_name.to_string(), endpoint: endpoint.to_string() };
+    let creds = Credentials::new(Some(access), Some(secret), None, None, None).ok()?;
+    let bucket = Bucket::new(name, region, creds).ok()?;
+    Some(if path_style { bucket.with_path_style() } else { bucket })
+}
+
+/// Bucket PRIVÉ des documents lys-en-france (versionné côté Scaleway), distinct du cache : clé d'accès dédiée.
+/// `None` si `LYS_S3_BUCKET`, `LYS_S3_ACCESS_KEY` ou `LYS_S3_SECRET_KEY` manque : les routes documents
+/// répondent alors 503 et le reste de /lys continue de fonctionner. Aucune valeur n'est journalisée.
+pub(crate) fn lys_bucket() -> Option<&'static Bucket> {
+    static B: OnceLock<Option<Box<Bucket>>> = OnceLock::new();
+    B.get_or_init(|| {
+        let name = std::env::var("LYS_S3_BUCKET").ok().filter(|v| !v.is_empty())?;
+        let access = std::env::var("LYS_S3_ACCESS_KEY").ok().filter(|v| !v.is_empty())?;
+        let secret = std::env::var("LYS_S3_SECRET_KEY").ok().filter(|v| !v.is_empty())?;
+        let region_name = std::env::var("LYS_S3_REGION").unwrap_or_else(|_| "fr-par".to_string());
+        let endpoint = std::env::var("LYS_S3_ENDPOINT")
+            .unwrap_or_else(|_| format!("https://s3.{region_name}.scw.cloud"));
+        let path_style = std::env::var("LYS_S3_PATH_STYLE").as_deref() == Ok("1");
+        let b = build_bucket(&name, &access, &secret, &region_name, &endpoint, path_style);
+        match &b {
+            Some(_) => tracing::info!("lys: stockage des documents actif (bucket '{name}')"),
+            None => tracing::warn!("lys: stockage des documents désactivé (configuration invalide)"),
+        }
+        b
+    })
+    .as_deref()
+}
