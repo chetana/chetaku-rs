@@ -42,7 +42,7 @@ thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
 jsonwebtoken = "9"
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { version = "~1.17", features = ["v4", "serde"] }
 
 [dev-dependencies]
 base64 = "0.22"
