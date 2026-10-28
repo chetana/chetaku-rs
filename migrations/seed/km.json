@@ -22,7 +22,7 @@
     },
     "sip-lagny": {
       "title_km": "SIP (ការិយាល័យពន្ធសម្រាប់បុគ្គល) នៅ Lagny-sur-Marne (3 rue Delambre, 77400)",
-      "help_km": "ដំបូង សូមប្រកាសអាពាហ៍ពិពាហ៍តាមអ៊ីនធឺណិត (espace particulier ជាគណនីពន្ធផ្ទាល់ខ្លួន › Gérer mon prélèvement à la source › changement de situation)។ ទៅបញ្ជរ (guichet) តែនៅពេលមានការរាំងស្ទះប៉ុណ្ណោះ។ រយៈពេលកំណត់ 60 ថ្ងៃ បន្ទាប់ពីព្រឹត្តិការណ៍៖ មិនទាន់បានផ្ទៀងផ្ទាត់ (non vérifié) សម្រាប់អាពាហ៍ពិពាហ៍ដែលបានធ្វើយូរហើយ។ ត្រូវបញ្ជាក់ (à confirmer)៖ ម៉ោងបើករបស់ SIP និងថាតើ SIP នេះទទួលខុសត្រូវលើក្រុង (commune) ដែលយើងរស់នៅឬទេ (espace particulier › Contact et RDV)។"
+      "help_km": "លំដាប់ដែលត្រូវធ្វើ៖ ជំហានទី 1 ទៅបញ្ជរ (guichet) នៅ SIP ជាមួយឯកសារខាងក្រោម ដើម្បីទទួលលេខពន្ធ (numéro fiscal) របស់ Lys ព្រោះ SIP ទាមទារលេខនេះមុនគេ។ ជំហានទី 2 បន្ទាប់មក ទើបប្រកាសអាពាហ៍ពិពាហ៍តាមអ៊ីនធឺណិត (espace particulier ជាគណនីពន្ធផ្ទាល់ខ្លួន › Gérer mon prélèvement à la source › changement de situation) ហើយបំពេញលេខពន្ធរបស់នាង។ រយៈពេលកំណត់ 60 ថ្ងៃ បន្ទាប់ពីព្រឹត្តិការណ៍៖ មិនទាន់បានផ្ទៀងផ្ទាត់ (non vérifié) សម្រាប់អាពាហ៍ពិពាហ៍ដែលបានធ្វើយូរហើយ។ ត្រូវបញ្ជាក់ (à confirmer)៖ ម៉ោងបើករបស់ SIP និងថាតើ SIP នេះទទួលខុសត្រូវលើក្រុង (commune) ដែលយើងរស់នៅឬទេ (espace particulier › Contact et RDV)។"
     },
     "cpam-puma": {
       "title_km": "បើកសិទ្ធិធានារ៉ាប់រងសុខភាពនៅ CPAM 77 (ការិយាល័យធានារ៉ាប់រងសុខភាព) (PUMa ៖ ធានារ៉ាប់រងសុខភាពសកល) ក្នុងនាម Lys ផ្ទាល់",
@@ -63,8 +63,8 @@
     "carte-pluriannuelle.2": {"text_km": "ប្រឡងពលរដ្ឋ (examen civique)"},
     "carte-pluriannuelle.3": {"text_km": "ភស្តុតាងនៃការរស់នៅជាមួយគ្នា (preuves de communauté de vie)"},
     "carte-pluriannuelle.4": {"text_km": "លិខិតបញ្ជាក់ CIR (attestation du CIR)"},
-    "sip-lagny.1": {"text_km": "ប្រកាសអាពាហ៍ពិពាហ៍តាមអ៊ីនធឺណិត (changement de situation ៖ ការផ្លាស់ប្តូរស្ថានភាព)"},
-    "sip-lagny.2": {"text_km": "ទទួលលេខពន្ធ (numéro fiscal) របស់ Lys (នៅ SIP បើនាងមិនទាន់មានលេខនេះ)"},
+    "sip-lagny.1": {"text_km": "ប្រកាសអាពាហ៍ពិពាហ៍តាមអ៊ីនធឺណិត (changement de situation ៖ ការផ្លាស់ប្តូរស្ថានភាព) ដោយបំពេញលេខពន្ធរបស់ Lys"},
+    "sip-lagny.2": {"text_km": "ទទួលលេខពន្ធ (numéro fiscal) របស់ Lys នៅបញ្ជរ (guichet) របស់ SIP ជាមួយឯកសារខាងក្រោម"},
     "sip-lagny.3": {"text_km": "ពិនិត្យអត្រាថ្មីនៃការកាត់ពន្ធពីប្រាក់ចំណូលដោយផ្ទាល់ (prélèvement à la source) (គ្រួសារ (foyer), 2 ចំណែក (parts))"},
     "sip-lagny.4": {"text_km": "លិខិតឆ្លងដែនរបស់ប្តីប្រពន្ធ (passeports)"},
     "sip-lagny.5": {"text_km": "VLS-TS ដែលបានបញ្ជាក់សុពលភាពរួច (VLS-TS validé)"},

@@ -22,7 +22,7 @@
     },
     "sip-lagny": {
       "title_km": "SIP (bureau des impôts pour les particuliers) à Lagny-sur-Marne (3 rue Delambre, 77400)",
-      "help_km": "D'abord, déclarez le mariage en ligne (espace particulier, c'est-à-dire le compte fiscal personnel › Gérer mon prélèvement à la source › changement de situation). Allez au guichet (guichet) seulement en cas de blocage. Délai de 60 jours après l'événement : pas encore vérifié (non vérifié) pour un mariage fait il y a longtemps. À confirmer (à confirmer) : les horaires d'ouverture du SIP, et si ce SIP est responsable de la commune (commune) où nous habitons (espace particulier › Contact et RDV)."
+      "help_km": "Ordre à suivre : étape 1, allez au guichet (guichet) du SIP avec les documents ci-dessous pour obtenir le numéro fiscal (numéro fiscal) de Lys, car le SIP exige ce numéro en premier. Étape 2, ensuite seulement, déclarez le mariage en ligne (espace particulier, c'est-à-dire le compte fiscal personnel › Gérer mon prélèvement à la source › changement de situation) et renseignez son numéro fiscal. Délai de 60 jours après l'événement : pas encore vérifié (non vérifié) pour un mariage fait il y a longtemps. À confirmer (à confirmer) : les horaires d'ouverture du SIP, et si ce SIP est responsable de la commune (commune) où nous habitons (espace particulier › Contact et RDV)."
     },
     "cpam-puma": {
       "title_km": "Ouvrir les droits à l'assurance maladie à la CPAM 77 (bureau d'assurance maladie) (PUMa : assurance maladie universelle) au nom de Lys elle-même",
@@ -63,8 +63,8 @@
     "carte-pluriannuelle.2": {"text_km": "Passer l'examen de citoyenneté (examen civique)"},
     "carte-pluriannuelle.3": {"text_km": "Preuves de la vie commune (preuves de communauté de vie)"},
     "carte-pluriannuelle.4": {"text_km": "Attestation du CIR (attestation du CIR)"},
-    "sip-lagny.1": {"text_km": "Déclarer le mariage en ligne (changement de situation : changement de situation)"},
-    "sip-lagny.2": {"text_km": "Obtenir le numéro fiscal (numéro fiscal) de Lys (au SIP si elle n'a pas encore ce numéro)"},
+    "sip-lagny.1": {"text_km": "Déclarer le mariage en ligne (changement de situation : changement de situation) en renseignant le numéro fiscal de Lys"},
+    "sip-lagny.2": {"text_km": "Obtenir le numéro fiscal (numéro fiscal) de Lys au guichet (guichet) du SIP avec les documents ci-dessous"},
     "sip-lagny.3": {"text_km": "Vérifier le nouveau taux de l'impôt prélevé directement sur le revenu (prélèvement à la source) (foyer (foyer), 2 parts (parts))"},
     "sip-lagny.4": {"text_km": "Passeports du couple (passeports)"},
     "sip-lagny.5": {"text_km": "VLS-TS dont la validité a été confirmée (VLS-TS validé)"},
