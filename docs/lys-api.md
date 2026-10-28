@@ -225,13 +225,16 @@ Corps : `{ "question": string, "lang": "fr" | "km" }`. `question` : 1 à 500 **c
   "answer_km": "សូមចាប់ផ្តើម…",
   "machine_translated": true,
   "task_slugs": ["vls-ts-anef"],
-  "remaining_today": 29
+  "remaining_today": 29,
+  "id": "2026-10-28_0b9e1c52-3f0a-4c1e-9a55-6d2f7a1b8c34",
+  "created_at": "2026-10-28T10:00:00Z"
 }
 ```
 
 - `answer_km` vaut `null` si la traduction a échoué ou a été refusée par les garde-fous (pas d'écriture khmère, écriture étrangère, latin collé au khmer, nombre ou date de la réponse française perdu ou modifié) : afficher le français seul. `machine_translated` vaut toujours `true` (pastille « traduction automatique »).
 - `task_slugs` : tâches dont le slug ou le titre est cité dans la réponse, dans l'ordre du plan ; `[]` sinon.
 - `remaining_today` : questions restantes aujourd'hui pour ce compte.
+- `id`, `created_at` : identifiant public et horodatage (RFC 3339, UTC) de l'échange enregistré dans l'historique ; `null` tous les deux si l'enregistrement n'a pas eu lieu (stockage absent ou en panne). Un échec de stockage ne fait jamais échouer la requête.
 - Les réponses sont courtes (6 phrases), fondées sur le plan et sur des dates calculées par le serveur ; si le plan ne dit pas, la réponse l'indique (« à confirmer sur le site officiel »). Hors sujet : refus poli.
 - Confidentialité : seuls partent chez le fournisseur d'IA le plan (titres, aides, échéances, étapes et pièces), les dates clés et la question. Jamais les notes, documents, rendez-vous, ni le `sub`.
 
@@ -241,6 +244,7 @@ Erreurs, toutes au format `{ "error": "<message>", "kind": "<code>" }` :
 |---|---|---|
 | 400 | `invalid` | JSON mal formé, champ manquant ou de mauvais type, `lang` hors `fr`/`km`, question vide, > 500 caractères ou avec caractère de contrôle (ne consomme pas le quota) |
 | 429 | `daily_limit` | 30 questions par compte et par jour, ou plafond global de 300 par jour atteint |
+| 404 | `not_found` | (historique) échange introuvable |
 | 503 | `unavailable` | chat désactivé sur le serveur, ou fournisseur d'IA en erreur / sans réponse en 25 s (la question n'est alors pas décomptée) |
 
 Le corps d'erreur du fournisseur et la clé ne sont jamais renvoyés. Les 401/403 gardent leur format habituel (sans `kind`).
@@ -259,3 +263,42 @@ Limites :
 | `CLINE_BASE_URL` | optionnelle, défaut `https://api.cline.bot/api/v1/chat/completions` (utile pour un faux serveur de test) |
 | `LYS_CHAT_DAILY_PER_USER` | optionnelle, défaut `30` |
 | `LYS_CHAT_DAILY_GLOBAL` | optionnelle, défaut `300` |
+
+## Historique du chat
+
+Historique **partagé** entre les comptes de la liste blanche : chacun voit les échanges de l'autre. Mêmes garde (401 sans jeton, 403 hors liste blanche), limite de corps et rate-limit par IP que le reste de `/lys`. Le plafond journalier du chat ne s'applique pas à ces deux routes. Erreurs au format `{ "error", "kind" }`.
+
+**Stockage** : un objet JSON par échange dans le bucket privé des documents (mêmes variables `LYS_S3_*`), clé `chat/AAAA/MM/JJ/<uuid>.json`, jour de **Paris**. Contenu : `{ id, created_at, author_sub, question, answer_fr, answer_km, task_slugs }`. `author_sub` n'est jamais renvoyé par l'API. Sans bucket configuré, rien n'est enregistré et la lecture renvoie une liste vide. Ni question ni réponse ne sont écrites dans les journaux.
+
+**Rétention** : illimitée, jusqu'à suppression manuelle (`DELETE`). Aucune purge automatique.
+
+`id` public : `AAAA-MM-JJ_<uuid>` (uuid en minuscules, forme canonique) ; il sert à reconstruire la clé. Toute autre forme est refusée avant tout accès au stockage.
+
+### GET /lys/chat/history?limit=N
+
+`limit` : défaut et maximum `50` (borné à 1..50 ; non numérique : `400 invalid`). `200`, du plus récent au plus ancien :
+
+```json
+{
+  "items": [
+    {
+      "id": "2026-10-28_0b9e1c52-3f0a-4c1e-9a55-6d2f7a1b8c34",
+      "created_at": "2026-10-28T10:00:00Z",
+      "question": "Par quoi commencer ?",
+      "answer_fr": "…",
+      "answer_km": null,
+      "task_slugs": ["vls-ts-anef"],
+      "mine": true
+    }
+  ]
+}
+```
+
+- `mine` : l'échange a été posé par le compte du jeton.
+- **Limite de lecture : 30 jours.** Le serveur liste les jours en remontant depuis aujourd'hui (Paris) jusqu'à avoir `N` échanges, sans dépasser 30 jours en arrière ; un échange plus ancien reste stocké mais n'est plus listé.
+- Un objet illisible ou corrompu est ignoré (avertissement sans contenu).
+- Stockage non configuré : `200 {"items": []}`. Stockage en panne : `503 unavailable`.
+
+### DELETE /lys/chat/history/{id}
+
+`204` sans corps. `400 invalid` si l'`id` n'a pas la forme exacte ci-dessus ; `404 not_found` si l'objet n'existe pas ; `503 unavailable` si le stockage est absent ou en panne. N'importe lequel des comptes autorisés peut supprimer n'importe quel échange. L'objet est supprimé du bucket, qui est versionné : la version reste récupérable côté administration.

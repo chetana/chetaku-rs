@@ -18,6 +18,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::auth::Claims;
+use crate::routes::lys_history::ChatHistory;
 
 pub const CLINE_URL: &str = "https://api.cline.bot/api/v1/chat/completions";
 const CLINE_MODEL: &str = "cline-pass/glm-5.3-flash";
@@ -535,6 +536,7 @@ pub enum ChatError {
     Invalid(&'static str),
     DailyLimit,
     Unavailable,
+    NotFound,
     Internal,
 }
 
@@ -544,6 +546,7 @@ impl IntoResponse for ChatError {
             ChatError::Invalid(m) => (StatusCode::BAD_REQUEST, "invalid", m),
             ChatError::DailyLimit => (StatusCode::TOO_MANY_REQUESTS, "daily_limit", "limite quotidienne de questions atteinte"),
             ChatError::Unavailable => (StatusCode::SERVICE_UNAVAILABLE, "unavailable", "assistant indisponible"),
+            ChatError::NotFound => (StatusCode::NOT_FOUND, "not_found", "échange introuvable"),
             ChatError::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "internal", "Internal error"),
         };
         (status, Json(json!({ "error": msg, "kind": kind }))).into_response()
@@ -557,6 +560,7 @@ pub async fn chat(
     State(pool): State<PgPool>,
     Extension(claims): Extension<Claims>,
     Extension(svc): Extension<ChatService>,
+    Extension(history): Extension<ChatHistory>,
     body: Bytes,
 ) -> Result<Json<Value>, ChatError> {
     let Some(client) = svc.0.client.as_ref() else { return Err(ChatError::Unavailable) };
@@ -566,6 +570,9 @@ pub async fn chat(
     match answer(&svc, client, &pool, &question, now).await {
         Ok(mut v) => {
             v["remaining_today"] = json!(remaining);
+            let (id, created_at) = record_exchange(&history, &claims.sub, now, &question, &v).await;
+            v["id"] = json!(id);
+            v["created_at"] = json!(created_at);
             Ok(Json(v))
         }
         Err(e) => {
@@ -574,6 +581,16 @@ pub async fn chat(
             }
             Err(e)
         }
+    }
+}
+
+/// Enregistrement au mieux : `(null, null)` si le stockage est absent ou en échec.
+async fn record_exchange(history: &ChatHistory, sub: &str, now: DateTime<Utc>, question: &str, v: &Value) -> (Option<String>, Option<String>) {
+    let slugs: Vec<String> = v["task_slugs"].as_array().into_iter().flatten().filter_map(|s| s.as_str().map(str::to_string)).collect();
+    let recorded = history.record(now, sub, question, v["answer_fr"].as_str().unwrap_or_default(), v["answer_km"].as_str(), &slugs).await;
+    match recorded {
+        Some((id, created_at)) => (Some(id), Some(created_at)),
+        None => (None, None),
     }
 }
 
