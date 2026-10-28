@@ -22,6 +22,7 @@ use tower_http::cors::{AllowHeaders, CorsLayer};
 use crate::auth::{self, Allowed, Authenticator, Claims};
 use crate::error::AppError;
 use crate::routes::lys_chat::{self, ChatService};
+use crate::routes::lys_history::{self, ChatHistory};
 use crate::routes::lys_docs::{self, parse_doc_id, DocStore, DocumentOut};
 use uuid::Uuid;
 
@@ -42,7 +43,7 @@ struct LysAuth {
 
 /// Routeur de production : audience et liste blanche lues dans l'environnement.
 pub fn router() -> Router<PgPool> {
-    router_with_chat(auth::authenticator_lys(), auth::allowed_lys(), DocStore::from_env(), ChatService::from_env())
+    router_with_history(auth::authenticator_lys(), auth::allowed_lys(), DocStore::from_env(), ChatService::from_env(), ChatHistory::from_env())
 }
 
 #[cfg(test)]
@@ -55,7 +56,18 @@ fn router_with_store(authenticator: Option<Arc<Authenticator>>, allowed: Arc<All
     router_with_chat(authenticator, allowed, store, ChatService::disabled())
 }
 
+#[cfg(test)]
 fn router_with_chat(authenticator: Option<Arc<Authenticator>>, allowed: Arc<Allowed>, store: DocStore, chat: ChatService) -> Router<PgPool> {
+    router_with_history(authenticator, allowed, store, chat, ChatHistory::disabled())
+}
+
+fn router_with_history(
+    authenticator: Option<Arc<Authenticator>>,
+    allowed: Arc<Allowed>,
+    store: DocStore,
+    chat: ChatService,
+    history: ChatHistory,
+) -> Router<PgPool> {
     let cors = CorsLayer::new()
         .allow_origin([
             HeaderValue::from_static("https://lys-en-france.chetana.fr"),
@@ -67,6 +79,8 @@ fn router_with_chat(authenticator: Option<Arc<Authenticator>>, allowed: Arc<Allo
         .route("/lys/me", get(me))
         .route("/lys/plan", get(plan))
         .route("/lys/chat", post(lys_chat::chat))
+        .route("/lys/chat/history", get(lys_history::list))
+        .route("/lys/chat/history/{id}", delete(lys_history::delete))
         .route("/lys/items/{slug}/done", put(put_item_done))
         .route("/lys/tasks/{slug}", patch(patch_task))
         .route("/lys/tasks/{slug}/appointments", post(post_appointment))
@@ -82,6 +96,7 @@ fn router_with_chat(authenticator: Option<Arc<Authenticator>>, allowed: Arc<Allo
         .layer(DefaultBodyLimit::max(MAX_BODY))
         .layer(Extension(store))
         .layer(Extension(chat))
+        .layer(Extension(history))
         .route_layer(from_fn_with_state(LysAuth { authenticator, allowed }, guard))
         // CORS à l'extérieur du garde : un préflight n'a pas d'Authorization.
         .layer(cors)
@@ -1064,6 +1079,7 @@ mod tests {
     });
 
     mod agenda_it;
+    mod chat_history_it;
     mod chat_it;
     mod docs_it;
 }
