@@ -15,9 +15,9 @@ Format unique : `{ "error": "<message>" }`.
 | 413 | corps > 16 Kio (document : > 12 Mio) |
 | 415 | document dont le type réel n'est pas PDF, JPEG, PNG ou HEIC/HEIF |
 | 422 | JSON valide mais champ inconnu, manquant ou de mauvais type (ex. date illisible) |
-| 429 | limite par IP (120 req/min) |
+| 429 | limite par IP (120 req/min, corps sans `kind`) ; sur `POST /lys/chat` : `{"error":"…","kind":"daily_limit"}` |
 | 502 | stockage des documents en erreur (`{"error":"stockage en erreur"}`, détail dans les logs seulement) |
-| 503 | stockage des documents non configuré (`{"error":"stockage indisponible"}`) ; le reste de `/lys` fonctionne |
+| 503 | stockage des documents non configuré (`{"error":"stockage indisponible"}`) ; chat désactivé ou Cline en échec (`{"kind":"unavailable"}`) ; le reste de `/lys` fonctionne |
 | 500 | erreur interne, message générique `Internal error` |
 
 ## GET /lys/me
@@ -210,3 +210,52 @@ const r = await fetch(`${API}/lys/tasks/${task}/documents?item=${item}&filename=
 ### Configuration serveur (variables d'environnement)
 
 `LYS_S3_BUCKET`, `LYS_S3_ACCESS_KEY`, `LYS_S3_SECRET_KEY` (les trois requises, sinon 503) ; optionnelles : `LYS_S3_REGION` (défaut `fr-par`), `LYS_S3_ENDPOINT` (défaut `https://s3.<région>.scw.cloud`), `LYS_S3_PATH_STYLE=1` (S3 auto-hébergé).
+
+## POST /lys/chat
+
+Une question libre sur le plan du couple ; réponse en français et traduction khmère automatique. Même garde que le reste de `/lys` (401 sans jeton, 403 hors liste blanche), corps limité à 16 Kio, et le rate-limit global par IP s'applique.
+
+Corps : `{ "question": string, "lang": "fr" | "km" }`. `question` : 1 à 500 **caractères** après `trim`, aucun caractère de contrôle (retour à la ligne compris). `lang` est validé mais ne change rien à la réponse : le serveur renvoie toujours les deux langues, le front choisit laquelle afficher.
+
+`200` :
+
+```json
+{
+  "answer_fr": "Commencez par valider le VLS-TS sur l'ANEF avant le mardi 2 février 2027.",
+  "answer_km": "សូមចាប់ផ្តើម…",
+  "machine_translated": true,
+  "task_slugs": ["vls-ts-anef"],
+  "remaining_today": 29
+}
+```
+
+- `answer_km` vaut `null` si la traduction a échoué ou a été refusée par les garde-fous (pas d'écriture khmère, écriture étrangère, latin collé au khmer, nombre ou date de la réponse française perdu ou modifié) : afficher le français seul. `machine_translated` vaut toujours `true` (pastille « traduction automatique »).
+- `task_slugs` : tâches dont le slug ou le titre est cité dans la réponse, dans l'ordre du plan ; `[]` sinon.
+- `remaining_today` : questions restantes aujourd'hui pour ce compte.
+- Les réponses sont courtes (6 phrases), fondées sur le plan et sur des dates calculées par le serveur ; si le plan ne dit pas, la réponse l'indique (« à confirmer sur le site officiel »). Hors sujet : refus poli.
+- Confidentialité : seuls partent chez le fournisseur d'IA le plan (titres, aides, échéances, étapes et pièces), les dates clés et la question. Jamais les notes, documents, rendez-vous, ni le `sub`.
+
+Erreurs, toutes au format `{ "error": "<message>", "kind": "<code>" }` :
+
+| Code | `kind` | Cas |
+|---|---|---|
+| 400 | `invalid` | JSON mal formé, champ manquant ou de mauvais type, `lang` hors `fr`/`km`, question vide, > 500 caractères ou avec caractère de contrôle (ne consomme pas le quota) |
+| 429 | `daily_limit` | 30 questions par compte et par jour, ou plafond global de 300 par jour atteint |
+| 503 | `unavailable` | chat désactivé sur le serveur, ou fournisseur d'IA en erreur / sans réponse en 25 s (la question n'est alors pas décomptée) |
+
+Le corps d'erreur du fournisseur et la clé ne sont jamais renvoyés. Les 401/403 gardent leur format habituel (sans `kind`).
+
+Limites :
+- Compteurs **en mémoire** : remis à zéro au redémarrage du serveur et à minuit, heure de Paris. Ce sont des garde-fous de coût, pas un quota garanti ; plusieurs instances auraient chacune leurs compteurs.
+- Deux appels successifs au fournisseur (réponse puis traduction), 25 s au plus chacun : prévoir un délai de 50 s côté front, la médiane mesurée est de quelques secondes.
+- La traduction khmère est automatique et non relue.
+
+### Configuration serveur (variables d'environnement)
+
+| Variable | Rôle |
+|---|---|
+| `LYS_CHAT_ENABLED` | `1` pour activer ; toute autre valeur : 503 `unavailable` |
+| `CLINE_API_KEY` | clé du fournisseur ; absente ou vide : 503 `unavailable` |
+| `CLINE_BASE_URL` | optionnelle, défaut `https://api.cline.bot/api/v1/chat/completions` (utile pour un faux serveur de test) |
+| `LYS_CHAT_DAILY_PER_USER` | optionnelle, défaut `30` |
+| `LYS_CHAT_DAILY_GLOBAL` | optionnelle, défaut `300` |
