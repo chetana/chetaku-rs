@@ -16,4 +16,5 @@ pub mod digest;
 pub mod live_sessions;
 pub mod impacts;
 pub mod lys;
+pub mod lys_chat;
 pub mod lys_docs;
