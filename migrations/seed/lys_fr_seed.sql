@@ -17,7 +17,7 @@ ON CONFLICT (slug) DO UPDATE SET position = EXCLUDED.position, title_fr = EXCLUD
 INSERT INTO lys_fr.task (slug, category_slug, position, title_fr, help_fr, due_date) VALUES
   ('vls-ts-anef', 'sejour', 1,
    'Valider le VLS-TS sur l''ANEF',
-   'Site : administration-etrangers-en-france.interieur.gouv.fr. Délai réglementaire : 3 mois après la date d''entrée (tampon). Passé ce délai, la validation n''est plus possible et le séjour devient irrégulier : saisir la date limite exacte dans « échéance réglementaire ». La taxe est payée en ligne ; le montant est affiché par l''ANEF (barème en vigueur depuis le 01/05/2026).',
+   'Le VLS-TS (visa de long séjour valant titre de séjour) tient lieu de titre de séjour pendant la première année : pas de préfecture à ce stade. À l''arrivée, il faut le valider en ligne sur l''ANEF : saisir les informations du visa et la date d''entrée, payer la taxe, puis télécharger l''attestation de validation. C''est cette attestation qui rend le visa valable en France ; elle est demandée pour le numéro fiscal (SIP), la CPAM et France Travail. Site : administration-etrangers-en-france.interieur.gouv.fr. Délai réglementaire : 3 mois après la date d''entrée (tampon). Passé ce délai, la validation n''est plus possible et le séjour devient irrégulier : saisir la date limite exacte dans « échéance réglementaire ». La taxe est payée en ligne ; le montant est affiché par l''ANEF (barème en vigueur depuis le 01/05/2026).',
    DATE '2026-11-09'),
   ('ofii-cir', 'sejour', 2,
    'OFII : contrat d''intégration républicaine (CIR)',
