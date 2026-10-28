@@ -17,7 +17,7 @@ ON CONFLICT (slug) DO UPDATE SET position = EXCLUDED.position, title_fr = EXCLUD
 INSERT INTO lys_fr.task (slug, category_slug, position, title_fr, help_fr, due_date) VALUES
   ('vls-ts-anef', 'sejour', 1,
    'Valider le VLS-TS sur l''ANEF',
-   'Site : administration-etrangers-en-france.interieur.gouv.fr. Délai réglementaire : 3 mois après la date d''entrée (tampon). Passé ce délai, la validation n''est plus possible et le séjour devient irrégulier : saisir la date limite exacte dans « échéance réglementaire ». La taxe est payée en ligne ; le montant est affiché par l''ANEF (barème en vigueur depuis le 01/05/2026).',
+   'Le VLS-TS (visa de long séjour valant titre de séjour) tient lieu de titre de séjour pendant la première année : pas de préfecture à ce stade. À l''arrivée, il faut le valider en ligne sur l''ANEF : saisir les informations du visa et la date d''entrée, payer la taxe, puis télécharger l''attestation de validation. C''est cette attestation qui rend le visa valable en France ; elle est demandée pour le numéro fiscal (SIP), la CPAM et France Travail. Site : administration-etrangers-en-france.interieur.gouv.fr. Délai réglementaire : 3 mois après la date d''entrée (tampon). Passé ce délai, la validation n''est plus possible et le séjour devient irrégulier : saisir la date limite exacte dans « échéance réglementaire ». La taxe est payée en ligne ; le montant est affiché par l''ANEF (barème en vigueur depuis le 01/05/2026).',
    DATE '2026-11-09'),
   ('ofii-cir', 'sejour', 2,
    'OFII : contrat d''intégration républicaine (CIR)',
@@ -29,7 +29,7 @@ INSERT INTO lys_fr.task (slug, category_slug, position, title_fr, help_fr, due_d
    NULL),
   ('sip-lagny', 'impots', 1,
    'SIP de Lagny-sur-Marne (3 rue Delambre, 77400)',
-   'Déclarer d''abord le mariage en ligne (espace particulier, Gérer mon prélèvement à la source, changement de situation) ; le guichet seulement si c''est bloqué. Délai de 60 jours après l''événement : non vérifié pour un mariage déjà ancien. À confirmer : horaires du SIP, et sa compétence pour la commune de résidence (espace particulier, Contact et RDV).',
+   'Ordre à respecter : d''abord le guichet du SIP, avec les pièces ci-dessous, pour obtenir le numéro fiscal de Lys (le SIP l''exige avant toute déclaration) ; ensuite seulement déclarer le mariage en ligne (espace particulier, Gérer mon prélèvement à la source, changement de situation) en y renseignant son numéro fiscal. Délai de 60 jours après l''événement : non vérifié pour un mariage déjà ancien. À confirmer : horaires du SIP, et sa compétence pour la commune de résidence (espace particulier, Contact et RDV).',
    DATE '2026-11-06'),
   ('cpam-puma', 'sante', 1,
    'Ouverture des droits CPAM 77 (PUMa) au nom de Lys',
@@ -76,8 +76,8 @@ INSERT INTO lys_fr.item (slug, task_slug, kind, position, label_fr) VALUES
   ('carte-pluriannuelle.3', 'carte-pluriannuelle', 'document', 3, 'Preuves de communauté de vie'),
   ('carte-pluriannuelle.4', 'carte-pluriannuelle', 'document', 4, 'Attestation du CIR'),
 
-  ('sip-lagny.1', 'sip-lagny', 'step',     1, 'Déclarer le mariage en ligne (changement de situation)'),
-  ('sip-lagny.2', 'sip-lagny', 'step',     2, 'Obtenir le numéro fiscal de Lys (au SIP si elle n''en a pas)'),
+  ('sip-lagny.1', 'sip-lagny', 'step',     2, 'Déclarer le mariage en ligne avec son numéro fiscal (changement de situation)'),
+  ('sip-lagny.2', 'sip-lagny', 'step',     1, 'Obtenir le numéro fiscal de Lys au guichet du SIP, avec les pièces ci-dessous'),
   ('sip-lagny.3', 'sip-lagny', 'step',     3, 'Vérifier le nouveau taux de prélèvement à la source (foyer, 2 parts)'),
   ('sip-lagny.4', 'sip-lagny', 'document', 4, 'Passeports'),
   ('sip-lagny.5', 'sip-lagny', 'document', 5, 'VLS-TS validé'),
