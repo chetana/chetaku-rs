@@ -17,6 +17,7 @@ const SHOWN_REFS: usize = 5;
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct RunLite {
+    pub id: i64,
     pub automation: String,
     pub started_at: DateTime<Utc>,
     pub status: String,
@@ -118,6 +119,17 @@ pub fn build(runs: &[RunLite]) -> Value {
     areas.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     let areas: Vec<Value> = areas.into_iter().take(10).map(|(a, c)| json!({"area": a, "count": c})).collect();
 
+    // Dernier passage de chaque automatisation, retenu seulement s'il demande encore de l'attention.
+    // Erreurs d'abord, puis le plus récent : c'est l'ordre dans lequel on les traite.
+    let mut latest: BTreeMap<&str, &RunLite> = BTreeMap::new();
+    for r in &runs { latest.insert(r.automation.as_str(), r); }
+    let mut watch_runs: Vec<&RunLite> = latest.values().copied().filter(|r| r.status == "alert" || r.status == "error").collect();
+    watch_runs.sort_by(|a, b| (b.status == "error").cmp(&(a.status == "error")).then(b.started_at.cmp(&a.started_at)).then(a.automation.cmp(&b.automation)));
+    let watch: Vec<Value> = watch_runs
+        .iter()
+        .map(|r| json!({"id": r.id, "automation": r.automation, "status": r.status, "headline": r.headline, "started_at": r.started_at}))
+        .collect();
+
     let text = if total == 0 {
         "Aucun passage sur la période.".to_string()
     } else {
@@ -147,14 +159,8 @@ pub fn build(runs: &[RunLite]) -> Value {
             out.push(kind_sentence(k, &by_kind[k], &of_kind));
         }
 
-        let mut latest: BTreeMap<&str, &RunLite> = BTreeMap::new();
-        for r in &runs { latest.insert(r.automation.as_str(), r); }
-        let watch: Vec<String> = latest
-            .values()
-            .filter(|r| r.status == "alert" || r.status == "error")
-            .map(|r| format!("{} ({} : {})", r.automation, r.status, r.headline))
-            .collect();
-        if !watch.is_empty() {
+        if !watch_runs.is_empty() {
+            let watch: Vec<String> = watch_runs.iter().map(|r| format!("{} ({} : {})", r.automation, r.status, r.headline)).collect();
             out.push(format!("À regarder : {}.", watch.join(", ")));
         }
         out.join(" ")
@@ -162,7 +168,7 @@ pub fn build(runs: &[RunLite]) -> Value {
 
     json!({
         "runs": total, "active": active, "by_status": by_status,
-        "changes": changes, "areas": areas, "impacts": impacts, "text": text,
+        "changes": changes, "areas": areas, "impacts": impacts, "watch": watch, "text": text,
     })
 }
 
@@ -186,7 +192,7 @@ pub async fn digest(
         return Err(AppError::Validation("automation invalide".into()));
     }
     let rows: Vec<RunLite> = sqlx::query_as(
-        "SELECT automation, started_at, status, headline, items, impact FROM automation_runs
+        "SELECT id, automation, started_at, status, headline, items, impact FROM automation_runs
          WHERE started_at >= $1 AND started_at < $2 AND ($3::text IS NULL OR automation = $3)
          ORDER BY started_at LIMIT 2000",
     )
@@ -206,8 +212,10 @@ mod tests {
     use super::*;
 
     fn at(s: &str) -> DateTime<Utc> { s.parse().unwrap() }
+    // "2026-10-22T09:30:00Z" -> 930 : unique dans la fixture, lisible dans les assertions
+    fn fake_id(t: &str) -> i64 { t[11..13].parse::<i64>().unwrap() * 100 + t[14..16].parse::<i64>().unwrap() }
     fn run(automation: &str, t: &str, status: &str, headline: &str, items: Value, impact: Value) -> RunLite {
-        RunLite { automation: automation.into(), started_at: at(t), status: status.into(), headline: headline.into(), items, impact }
+        RunLite { id: fake_id(t), automation: automation.into(), started_at: at(t), status: status.into(), headline: headline.into(), items, impact }
     }
     fn fixture() -> Vec<RunLite> {
         vec![
@@ -263,6 +271,34 @@ mod tests {
         assert!(t.contains("À regarder"), "{t}");
         assert!(t.contains("sentry-watch") && t.contains("mr-feedback-watch"), "{t}");
         assert!(!t.contains("djustlab/ia"), "les références doivent être raccourcies: {t}");
+    }
+
+    #[test]
+    fn watch_liste_le_dernier_passage_en_alerte_ou_erreur_par_automatisation() {
+        let d = build(&fixture());
+        let w = d["watch"].as_array().unwrap();
+        assert_eq!(w.len(), 2, "{w:?}");
+        assert_eq!(w[0]["automation"], "mr-feedback-watch", "les erreurs passent avant les alertes");
+        assert_eq!(w[0]["status"], "error");
+        assert_eq!(w[0]["id"], 930);
+        assert_eq!(w[0]["headline"], "échec (code 3)");
+        assert_eq!(w[1]["automation"], "sentry-watch");
+        assert_eq!(w[1]["status"], "alert");
+    }
+
+    #[test]
+    fn watch_oublie_une_automatisation_revenue_au_vert() {
+        let mut f = fixture();
+        f.push(run("sentry-watch", "2026-10-22T11:00:00Z", "ok", "RAS", json!([]), json!({})));
+        let w = build(&f)["watch"].as_array().unwrap().clone();
+        assert!(w.iter().all(|x| x["automation"] != "sentry-watch"), "{w:?}");
+    }
+
+    #[test]
+    fn watch_vide_quand_rien_ne_demande_attention() {
+        let calm = vec![run("pod-restart-watch", "2026-10-22T10:00:00Z", "noop", "RAS", json!([]), json!({}))];
+        assert_eq!(build(&calm)["watch"], json!([]));
+        assert_eq!(build(&[])["watch"], json!([]));
     }
 
     #[test]
