@@ -1,0 +1,68 @@
+name: ci
+# PR : build de l'image seulement. Push sur main : build puis déploiement, qui attend l'approbation
+# de l'environnement prod. Retour arrière : Run workflow, action rollback + tag.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: rollback (seule action manuelle)
+        type: choice
+        options: [rollback]
+        default: rollback
+      tag:
+        description: tag à remettre (ex. 66)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t chetaku-rs:ci .
+
+  deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Construire l'image
+        run: |
+          TAG=$(git rev-list --count HEAD)
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          docker build -t "rg.fr-par.scw.cloud/chetana-apps/chetaku-rs:$TAG" .
+      - name: Envoyer l'image et relancer sur chetbox
+        env:
+          SSH_KEY: ${{ secrets.CHETBOX_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.CHETBOX_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id; chmod 600 ~/.ssh/id
+          docker save "rg.fr-par.scw.cloud/chetana-apps/chetaku-rs:$TAG" | gzip \
+            | ssh -i ~/.ssh/id -o BatchMode=yes -o IdentitiesOnly=yes root@163.172.7.239 deploy
+
+  rollback:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Revenir au tag demandé
+        env:
+          SSH_KEY: ${{ secrets.CHETBOX_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.CHETBOX_KNOWN_HOSTS }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id; chmod 600 ~/.ssh/id
+          ssh -i ~/.ssh/id -o BatchMode=yes -o IdentitiesOnly=yes root@163.172.7.239 "rollback $TAG"
