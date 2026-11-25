@@ -43,6 +43,7 @@ fn router_with(authenticator: Option<Arc<Authenticator>>, allowed: Arc<Allowed>)
     Router::new()
         .route("/dossiers/plan", get(plan))
         .route("/dossiers/tasks/{key}/done", put(put_done))
+        .route("/dossiers/steps/{key}/done", put(put_step_done))
         .layer(DefaultBodyLimit::max(MAX_BODY))
         .route_layer(from_fn_with_state(DossiersAuth { authenticator, allowed }, guard))
         // CORS à l'extérieur du garde : un préflight n'a pas d'Authorization.
@@ -77,8 +78,17 @@ struct TaskRow {
     key: String,
     subject_id: String,
     text: String,
+    detail: String,
     done: bool,
     done_at: Option<DateTime<Utc>>,
+}
+
+#[derive(FromRow)]
+struct StepRow {
+    key: String,
+    task_key: String,
+    text: String,
+    done: bool,
 }
 
 #[derive(FromRow, Serialize)]
@@ -92,9 +102,11 @@ async fn plan(State(pool): State<PgPool>) -> Result<Json<Value>, AppError> {
     let subjects: Vec<SubjectRow> =
         sqlx::query_as("SELECT id, title, status, locked FROM dossiers.subject ORDER BY position").fetch_all(&pool).await?;
     let tasks: Vec<TaskRow> =
-        sqlx::query_as("SELECT key, subject_id, text, done, done_at FROM dossiers.task ORDER BY subject_id, position")
+        sqlx::query_as("SELECT key, subject_id, text, detail, done, done_at FROM dossiers.task ORDER BY subject_id, position")
             .fetch_all(&pool)
             .await?;
+    let steps: Vec<StepRow> =
+        sqlx::query_as("SELECT key, task_key, text, done FROM dossiers.step ORDER BY task_key, position").fetch_all(&pool).await?;
     let deadlines: Vec<DeadlineOut> =
         sqlx::query_as("SELECT due, subject, action FROM dossiers.deadline ORDER BY due, id").fetch_all(&pool).await?;
     let sujets: Vec<Value> = subjects
@@ -103,7 +115,14 @@ async fn plan(State(pool): State<PgPool>) -> Result<Json<Value>, AppError> {
             let own: Vec<Value> = tasks
                 .iter()
                 .filter(|t| t.subject_id == s.id)
-                .map(|t| json!({ "key": t.key, "text": t.text, "done": t.done, "doneAt": t.done_at }))
+                .map(|t| {
+                    let own_steps: Vec<Value> = steps
+                        .iter()
+                        .filter(|st| st.task_key == t.key)
+                        .map(|st| json!({ "key": st.key, "text": st.text, "done": st.done }))
+                        .collect();
+                    json!({ "key": t.key, "text": t.text, "detail": t.detail, "done": t.done, "doneAt": t.done_at, "steps": own_steps })
+                })
                 .collect();
             json!({ "id": s.id, "title": s.title, "status": s.status, "locked": s.locked, "tasks": own })
         })
@@ -141,6 +160,30 @@ async fn put_done(
     Ok(Json(json!({ "key": key, "done": done })))
 }
 
+async fn put_step_done(
+    State(pool): State<PgPool>,
+    Extension(claims): Extension<Claims>,
+    Path(key): Path<String>,
+    body: Bytes,
+) -> Result<Json<Value>, AppError> {
+    let DoneBody { done } =
+        serde_json::from_slice(&body).map_err(|_| AppError::Validation("corps invalide : {\"done\": bool}".into()))?;
+    let changed = sqlx::query(
+        "UPDATE dossiers.step SET done = $2, done_at = CASE WHEN $2 THEN now() END, \
+         done_by = CASE WHEN $2 THEN $3 END, updated_at = now() WHERE key = $1",
+    )
+    .bind(&key)
+    .bind(done)
+    .bind(&claims.sub)
+    .execute(&pool)
+    .await?
+    .rows_affected();
+    if changed == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(Json(json!({ "key": key, "done": done })))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,6 +205,7 @@ mod tests {
     async fn sans_jeton_toutes_les_routes_refusent() {
         assert_eq!(status(app("u1"), "GET", "/dossiers/plan").await, StatusCode::UNAUTHORIZED);
         assert_eq!(status(app("u1"), "PUT", "/dossiers/tasks/lys-1/done").await, StatusCode::UNAUTHORIZED);
+        assert_eq!(status(app("u1"), "PUT", "/dossiers/steps/impots-5.1/done").await, StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
