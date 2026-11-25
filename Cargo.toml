@@ -45,4 +45,5 @@ jsonwebtoken = "9"
 uuid = { version = "~1.17", features = ["v4", "serde"] }
 
 [dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
 base64 = "0.22"

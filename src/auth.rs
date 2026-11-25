@@ -202,6 +202,25 @@ pub fn authenticator_lys() -> Option<Arc<Authenticator>> {
     .clone()
 }
 
+/// Authenticator de chet-admin : même Logto, audience propre (`DOSSIERS_LOGTO_AUDIENCE`).
+pub fn authenticator_dossiers() -> Option<Arc<Authenticator>> {
+    static A: OnceLock<Option<Arc<Authenticator>>> = OnceLock::new();
+    A.get_or_init(|| {
+        authenticator_from(
+            std::env::var("LOGTO_ENDPOINT").ok().as_deref(),
+            std::env::var("DOSSIERS_LOGTO_AUDIENCE").ok().as_deref(),
+        )
+        .map(Arc::new)
+    })
+    .clone()
+}
+
+/// Liste blanche chet-admin : `sub` uniquement (jamais d'e-mail) ; variable absente ou vide → personne.
+pub fn allowed_dossiers() -> Arc<Allowed> {
+    static A: OnceLock<Arc<Allowed>> = OnceLock::new();
+    A.get_or_init(|| Arc::new(allowed_lys_from(std::env::var("DOSSIERS_ALLOWED_SUBS").ok().as_deref()))).clone()
+}
+
 fn authenticator_from(endpoint: Option<&str>, audience: Option<&str>) -> Option<Authenticator> {
     let endpoint = endpoint.filter(|s| !s.is_empty())?;
     let audience = audience.filter(|s| !s.is_empty())?;
