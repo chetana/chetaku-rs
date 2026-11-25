@@ -135,6 +135,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(cors)
         // /lys porte son propre CORS et son garde d'auth ; TraceLayer et rate_limit ci-dessous le couvrent aussi.
         .merge(routes::lys::router())
+        .merge(routes::dossiers::router())
         .layer(TraceLayer::new_for_http())
         .layer(from_fn(rate_limit))
         .with_state(pool);
